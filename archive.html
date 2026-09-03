@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Archive — MDP Data</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div>
+    <nav id="navBox"></nav>
+    <div class="who" id="whoBox"></div>
+    <a href="#" id="logoutLink" class="small">تسجيل الخروج</a>
+  </aside>
+
+  <main class="main archive-main">
+    <h1>Archive</h1>
+    <p class="subtitle" id="subtitle">اختار البراند ثم البارتنرز والشهور لعرض التقرير.</p>
+
+    <div class="panel archive-filters">
+      <div class="filter-grid">
+        <div class="field">
+          <label>Brand</label>
+          <select id="brandSelect"><option value="">اختر Brand</option></select>
+        </div>
+
+        <div class="field">
+          <label>Partner Name</label>
+          <details class="multi-select" id="partnerBox">
+            <summary id="partnerSummary">اختر Partner</summary>
+            <div class="multi-menu" id="partnerOptions"></div>
+          </details>
+        </div>
+
+        <div class="field">
+          <label>Months</label>
+          <details class="multi-select" id="monthBox">
+            <summary id="monthSummary">اختر الشهور</summary>
+            <div class="multi-menu" id="monthOptions"></div>
+          </details>
+        </div>
+
+        <div class="archive-actions">
+          <button class="btn btn-sm" id="downloadBtn" style="width:auto;">تنزيل Excel</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="archive-stats">
+      <span class="badge" id="rowsBadge">0 صف</span>
+      <span class="muted small" id="loadingText"></span>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span>Archive Report</span>
+        <span class="badge" id="grandBadge">0</span>
+      </div>
+      <div class="table-wrap archive-table-wrap" id="tableWrap">
+        <div class="empty-state">اختر Brand لعرض التقرير.</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const monthOrder = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+let userProfile=null, allMdp=[], allAx=[], selectedPartners=new Set(), selectedMonths=new Set(), reportRows=[], reportMonths=[];
+
+const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm=x=>String(x??'').trim().toLowerCase();
+const num=x=>{
+  if(typeof x==='number') return isFinite(x)?x:0;
+  let s=String(x??'').replace(/,/g,'').replace(/[^\d.-]/g,'');
+  let n=parseFloat(s); return isFinite(n)?n:0;
+};
+const money=x=>Number(x||0).toLocaleString('en-US',{maximumFractionDigits:2});
+
+function normalizeMonth(v){
+  const s=String(v??'').trim();
+  if(!s) return '';
+  const short=s.slice(0,3).toLowerCase();
+  const map={jan:'Jan',feb:'Feb',mar:'Mar',apr:'Apr',may:'May',jun:'Jun',jul:'Jul',aug:'Aug',sep:'Sep',oct:'Oct',nov:'Nov',dec:'Dec'};
+  return map[short] || s;
+}
+function monthSort(a,b){
+  let ai=monthOrder.indexOf(a), bi=monthOrder.indexOf(b);
+  if(ai>=0 && bi>=0) return ai-bi;
+  if(ai>=0) return -1;if(bi>=0)return 1;
+  return a.localeCompare(b);
+}
+async function fetchAll(table, select, filters=[]){
+  let out=[], from=0, page=1000;
+  while(true){
+    let q=sb.from(table).select(select).order('id',{ascending:true}).range(from,from+page-1);
+    for(const f of filters) q=f(q);
+    const {data,error}=await q;
+    if(error) throw error;
+    out.push(...(data||[]));
+    if(!data || data.length<page) break;
+    from+=page;
+  }
+  return out;
+}
+async function init(){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session){location.href='index.html';return;}
+  const {data:p,error}=await sb.from('profiles').select('is_admin,email,display_name').eq('id',session.user.id).single();
+  if(error||!p){location.href='index.html';return;}
+  userProfile=p;
+  whoBox.textContent=p.display_name||p.email||session.user.email;
+  navBox.innerHTML=p.is_admin?`
+    <a href="admin.html">رفع الداتا</a>
+    <a href="archive-upload.html">رفع بيانات Archive</a>
+    <a href="brands.html">البراندات والبارتنرز</a>
+    <a href="users.html">المستخدمين والصلاحيات</a>
+    <a class="active" href="archive.html">Archive</a>
+    <a href="profile.html">تغيير كلمة المرور</a>`:
+    `<a href="dashboard.html">بياناتي</a>
+     <a class="active" href="archive.html">Archive</a>
+     <a href="profile.html">تغيير كلمة المرور</a>`;
+
+  loadingText.textContent='جاري تحميل البيانات المتاحة...';
+  try{
+    allMdp=await fetchAll('archive_mdp_rows','brand,partner,customer_name,customer_code,value,month');
+    allAx=await fetchAll('archive_ax_rows','brand,invoice_date,net_sales');
+    const brands=[...new Map(allMdp.map(r=>[norm(r.brand),String(r.brand).trim()])).values()];
+    // Include AX-only brands only for admins/authorized RLS.
+    allAx.forEach(r=>{if(r.brand && !brands.some(b=>norm(b)===norm(r.brand))) brands.push(String(r.brand).trim());});
+    brands.sort((a,b)=>a.localeCompare(b));
+    brandSelect.innerHTML='<option value="">اختر Brand</option>'+brands.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
+    subtitle.textContent=brands.length?'اختار Brand لعرض الـ Archive المتاح حسب صلاحياتك.':'لا توجد بيانات Archive متاحة لحسابك حاليًا.';
+  }catch(e){tableWrap.innerHTML='<div class="empty-state">خطأ: '+esc(e.message)+'</div>';}
+  finally{loadingText.textContent='';}
+}
+function currentBrand(){return brandSelect.value;}
+function mdpForBrand(){let b=norm(currentBrand());return allMdp.filter(r=>norm(r.brand)===b);}
+function axForBrand(){let b=norm(currentBrand());return allAx.filter(r=>norm(r.brand)===b);}
+function availablePartners(){
+  return [...new Map(mdpForBrand().map(r=>[norm(r.partner),String(r.partner).trim()])).values()].sort((a,b)=>a.localeCompare(b));
+}
+function availableMonths(){
+  const ms=new Set();
+  const partners=selectedPartners.size?[...selectedPartners].map(norm):null;
+  mdpForBrand().forEach(r=>{
+    if(!partners || partners.includes(norm(r.partner))) {let m=normalizeMonth(r.month);if(m)ms.add(m);}
+  });
+  axForBrand().forEach(r=>{
+    let d=r.invoice_date;if(!d)return;
+    let dt=new Date(String(d)+'T00:00:00');
+    if(!isNaN(dt)){ms.add(monthOrder[dt.getMonth()]);}
+  });
+  return [...ms].sort(monthSort);
+}
+function renderMulti(kind, values, set, containerId, summaryId){
+  const box=document.getElementById(containerId), summary=document.getElementById(summaryId);
+  const existing=new Set([...set].filter(x=>values.some(v=>norm(v)===norm(x))));
+  set.clear(); existing.forEach(x=>set.add(x));
+  if(!values.length){box.innerHTML='<div class="muted small">لا توجد خيارات.</div>';summary.textContent=kind==='partner'?'لا يوجد Partner':'لا توجد شهور';return;}
+  box.innerHTML=`<label class="multi-all"><input type="checkbox" data-all="${kind}" ${set.size===values.length?'checked':''}> اختيار الكل</label>`
+    +values.map(v=>`<label class="multi-item"><input type="checkbox" data-kind="${kind}" value="${esc(v)}" ${[...set].some(x=>norm(x)===norm(v))?'checked':''}> ${esc(v)}</label>`).join('');
+  updateSummary(kind,values,set,summary);
+  box.querySelectorAll(`input[data-kind="${kind}"]`).forEach(i=>i.onchange=()=>{
+    i.checked?set.add(i.value):[...set].forEach(x=>{if(norm(x)===norm(i.value))set.delete(x)});
+    updateSummary(kind,values,set,summary); if(kind==='partner') refreshMonths(); renderReport();
+  });
+  box.querySelector(`input[data-all="${kind}"]`).onchange=e=>{
+    set.clear();if(e.target.checked)values.forEach(v=>set.add(v));
+    renderMulti(kind,values,set,containerId,summaryId);if(kind==='partner')refreshMonths();renderReport();
+  };
+}
+function updateSummary(kind,values,set,summary){
+  if(!set.size) summary.textContent=kind==='partner'?'All Partners':'All Available Months';
+  else if(set.size===values.length) summary.textContent=kind==='partner'?'All Partners':'All Available Months';
+  else summary.textContent=[...set].join('، ');
+}
+function refreshPartners(){
+  selectedPartners.clear();
+  const v=availablePartners(); v.forEach(x=>selectedPartners.add(x)); // user-friendly default = all
+  renderMulti('partner',v,selectedPartners,'partnerOptions','partnerSummary');
+}
+function refreshMonths(){
+  const v=availableMonths();
+  const keep=[...selectedMonths].filter(x=>v.some(y=>norm(y)===norm(x)));
+  selectedMonths.clear();
+  if(keep.length) keep.forEach(x=>selectedMonths.add(x)); else v.forEach(x=>selectedMonths.add(x));
+  renderMulti('month',v,selectedMonths,'monthOptions','monthSummary');
+}
+brandSelect.onchange=()=>{
+  if(!currentBrand()){partnerOptions.innerHTML='';monthOptions.innerHTML='';tableWrap.innerHTML='<div class="empty-state">اختر Brand لعرض التقرير.</div>';return;}
+  refreshPartners();refreshMonths();renderReport();
+};
+function buildReport(){
+  const partners=selectedPartners.size?[...selectedPartners].map(norm):availablePartners().map(norm);
+  const months=selectedMonths.size?[...selectedMonths].map(normalizeMonth):availableMonths();
+  const monthSet=new Set(months.map(norm));
+  reportMonths=[...months].sort(monthSort);
+  const map=new Map();
+
+  mdpForBrand().forEach(r=>{
+    if(!partners.includes(norm(r.partner)))return;
+    const m=normalizeMonth(r.month);if(!monthSet.has(norm(m)))return;
+    const key=[r.partner,r.customer_name,r.customer_code].map(x=>String(x??'').trim()).join('\u0001');
+    if(!map.has(key))map.set(key,{partner:String(r.partner??''),customer_name:String(r.customer_name??''),customer_code:String(r.customer_code??''),months:{}});
+    const o=map.get(key);o.months[m]=(o.months[m]||0)+num(r.value);
+  });
+  reportRows=[...map.values()].sort((a,b)=>
+    a.partner.localeCompare(b.partner)||a.customer_name.localeCompare(b.customer_name)||a.customer_code.localeCompare(b.customer_code)
+  );
+
+  const miami={partner:'Miami Center',customer_name:'',customer_code:'',months:{}};
+  axForBrand().forEach(r=>{
+    if(!r.invoice_date)return;
+    const d=new Date(String(r.invoice_date)+'T00:00:00');if(isNaN(d))return;
+    const m=monthOrder[d.getMonth()];if(!monthSet.has(norm(m)))return;
+    miami.months[m]=(miami.months[m]||0)+num(r.net_sales);
+  });
+  const hasMiami=Object.values(miami.months).some(v=>v!==0);
+  return {rows:reportRows,miami:hasMiami?miami:null,months:reportMonths};
+}
+function renderReport(){
+  if(!currentBrand())return;
+  const {rows,miami,months}=buildReport();
+  rowsBadge.textContent=(rows.length+(miami?1:0))+' صف';
+  let grand={};months.forEach(m=>grand[m]=0);
+  let html='<table class="archive-table"><thead><tr><th>Partner Name</th><th>Customer Name</th><th>Customer Code</th>';
+  months.forEach(m=>html+='<th class="num">'+esc(m)+'</th>');
+  html+='<th class="num total-col">Grand Total</th></tr></thead><tbody>';
+  if(!rows.length&&!miami){html+=`<tr><td colspan="${4+months.length}" class="empty-cell">لا توجد بيانات مطابقة للفلاتر الحالية.</td></tr>`;}
+  rows.forEach(r=>{let total=0;html+='<tr><td>'+esc(r.partner)+'</td><td>'+esc(r.customer_name)+'</td><td>'+esc(r.customer_code)+'</td>';months.forEach(m=>{let v=r.months[m]||0;total+=v;grand[m]+=v;html+='<td class="num">'+(v?money(v):'—')+'</td>';});html+='<td class="num total-col">'+money(total)+'</td></tr>';});
+  if(miami){let total=0;html+='<tr class="miami-row"><td><b>Miami Center</b></td><td>—</td><td>—</td>';months.forEach(m=>{let v=miami.months[m]||0;total+=v;grand[m]+=v;html+='<td class="num">'+(v?money(v):'—')+'</td>';});html+='<td class="num total-col"><b>'+money(total)+'</b></td></tr>';}
+  let gt=0;html+='<tr class="grand-row"><td><b>Grand Total</b></td><td></td><td></td>';months.forEach(m=>{gt+=grand[m];html+='<td class="num"><b>'+money(grand[m])+'</b></td>';});html+='<td class="num total-col"><b>'+money(gt)+'</b></td></tr>';
+  html+='</tbody></table>';tableWrap.innerHTML=html;grandBadge.textContent=money(gt);
+}
+downloadBtn.onclick=()=>{
+  if(!currentBrand())return alert('اختر Brand أولًا.');
+  const {rows,miami,months}=buildReport();
+  const data=[];
+  const add=r=>{
+    const o={'Partner Name':r.partner,'Customer Name':r.customer_name,'Customer Code':r.customer_code};let total=0;
+    months.forEach(m=>{let v=r.months[m]||0;o[m]=v;total+=v;});o['Grand Total']=total;data.push(o);
+  };
+  rows.forEach(add);if(miami)add(miami);
+  const grand={'Partner Name':'Grand Total','Customer Name':'','Customer Code':''};let gt=0;
+  months.forEach(m=>{let v=data.reduce((s,r)=>s+num(r[m]),0);grand[m]=v;gt+=v;});grand['Grand Total']=gt;data.push(grand);
+  const ws=XLSX.utils.json_to_sheet(data,{header:['Partner Name','Customer Name','Customer Code',...months,'Grand Total']});
+  ws['!cols']=[{wch:24},{wch:28},{wch:18},...months.map(()=>({wch:14})),{wch:16}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Archive');
+  XLSX.writeFile(wb,`archive-${currentBrand()}-${new Date().toISOString().slice(0,10)}.xlsx`);
+};
+logoutLink.onclick=async e=>{e.preventDefault();await sb.auth.signOut();location.href='index.html';};
+init();
+</script>
+</body></html>

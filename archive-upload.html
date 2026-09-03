@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>رفع بيانات Archive — MDP Data</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+</head>
+<body>
+<div class="app-shell">
+<aside class="sidebar">
+  <div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div>
+  <nav>
+    <a href="admin.html">رفع الداتا</a>
+    <a class="active" href="archive-upload.html">رفع بيانات Archive</a>
+    <a href="brands.html">البراندات والبارتنرز</a>
+    <a href="users.html">المستخدمين والصلاحيات</a>
+    <a href="archive.html">Archive</a>
+    <a href="profile.html">تغيير كلمة المرور</a>
+  </nav>
+  <div class="who" id="whoBox"></div><a href="#" id="logoutLink" class="small">تسجيل الخروج</a>
+</aside>
+<main class="main">
+<h1>رفع بيانات Archive</h1>
+<p class="subtitle">كل ملف مستقل. عند الرفع الناجح يتم استبدال بيانات المصدر القديم بالكامل بالبيانات الجديدة.</p>
+
+<div class="grid-2">
+  <section class="panel">
+    <div class="panel-header"><span>ملف MDP</span><span class="badge" id="mdpCount">0 صف</span></div>
+    <div style="padding:20px">
+      <p class="muted small">Partner Name: B — Brand: D — Customer Name: F — Customer Code: G — Value: R — Month: AE</p>
+      <div class="upload-drop">اختر ملف MDP<input type="file" id="mdpFile" accept=".xlsx,.xls,.csv"></div>
+      <div id="mdpPreview" class="status-msg"></div>
+      <button class="btn" id="mdpUpload" disabled>رفع واستبدال بيانات MDP</button>
+      <div id="mdpStatus" class="status-msg"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-header"><span>ملف AX / Miami Center</span><span class="badge" id="axCount">0 صف</span></div>
+    <div style="padding:20px">
+      <p class="muted small">Brand: B — Invoice Date: D — Invoicing Name: J — Net Sales: T. يتم حفظ صفوف Miami Center فقط.</p>
+      <div class="upload-drop">اختر ملف AX<input type="file" id="axFile" accept=".xlsx,.xls,.csv"></div>
+      <div id="axPreview" class="status-msg"></div>
+      <button class="btn" id="axUpload" disabled>رفع واستبدال بيانات AX</button>
+      <div id="axStatus" class="status-msg"></div>
+    </div>
+  </section>
+</div>
+</main></div>
+<script>
+const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+let mdpRows=[],axRows=[];
+const col=(row,i)=>row[i]??'';
+const norm=x=>String(x??'').trim().toLowerCase();
+const num=x=>{if(typeof x==='number')return isFinite(x)?x:0;let n=parseFloat(String(x??'').replace(/,/g,'').replace(/[^\d.-]/g,''));return isFinite(n)?n:0;};
+function toDate(v){
+  if(v instanceof Date && !isNaN(v))return v;
+  if(typeof v==='number'){const d=XLSX.SSF.parse_date_code(v);if(d)return new Date(d.y,d.m-1,d.d);}
+  const d=new Date(v);return isNaN(d)?null:d;
+}
+async function init(){
+ const {data:{session}}=await sb.auth.getSession();if(!session)return location='index.html';
+ const {data:p}=await sb.from('profiles').select('is_admin,email,display_name').eq('id',session.user.id).single();
+ if(!p?.is_admin)return location='dashboard.html';whoBox.textContent=(p.display_name||p.email)+' (أدمن)';
+ const [m,a]=await Promise.all([
+  sb.from('archive_mdp_rows').select('id',{count:'exact',head:true}),
+  sb.from('archive_ax_rows').select('id',{count:'exact',head:true})
+ ]);
+ mdpCount.textContent=(m.count??0)+' صف';axCount.textContent=(a.count??0)+' صف';
+}
+function readFile(file){
+ return new Promise((resolve,reject)=>{
+  const r=new FileReader();r.onload=e=>{try{const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];resolve(XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true}));}catch(err){reject(err)}};r.onerror=reject;r.readAsArrayBuffer(file);
+ });
+}
+mdpFile.onchange=async()=>{
+ mdpRows=[];mdpUpload.disabled=true;mdpPreview.textContent='';
+ if(!mdpFile.files[0])return;
+ try{
+  const raw=await readFile(mdpFile.files[0]);if(raw.length<2)throw Error('الملف لا يحتوي على بيانات كافية.');
+  const data=raw.slice(1).filter(r=>r.some(v=>String(v).trim()!==''));
+  if(data.some(r=>r.length<31))throw Error('ملف MDP لا يحتوي على الأعمدة المطلوبة حتى AE.');
+  mdpRows=data.map(r=>({
+    brand:String(col(r,3)).trim(),partner:String(col(r,1)).trim(),
+    customer_name:String(col(r,5)).trim(),customer_code:String(col(r,6)).trim(),
+    value:num(col(r,17)),month:String(col(r,30)).trim()
+  })).filter(r=>r.brand&&r.partner&&r.month);
+  if(!mdpRows.length)throw Error('لم يتم العثور على صفوف صالحة.');
+  mdpPreview.textContent=`جاهز للرفع: ${mdpRows.length.toLocaleString()} صف صالح.`;mdpPreview.className='status-msg ok';mdpUpload.disabled=false;
+ }catch(e){mdpPreview.textContent='خطأ: '+e.message;mdpPreview.className='status-msg err';}
+};
+axFile.onchange=async()=>{
+ axRows=[];axUpload.disabled=true;axPreview.textContent='';
+ if(!axFile.files[0])return;
+ try{
+  const raw=await readFile(axFile.files[0]);if(raw.length<2)throw Error('الملف لا يحتوي على بيانات كافية.');
+  const data=raw.slice(1).filter(r=>r.some(v=>String(v).trim()!==''));
+  if(data.some(r=>r.length<20))throw Error('ملف AX لا يحتوي على الأعمدة المطلوبة حتى T.');
+  axRows=data.filter(r=>norm(col(r,9))==='miami center').map(r=>{
+    const d=toDate(col(r,3));return {brand:String(col(r,1)).trim(),invoice_date:d?d.toISOString().slice(0,10):null,net_sales:num(col(r,19))};
+  }).filter(r=>r.brand&&r.invoice_date);
+  if(!axRows.length)throw Error('لم يتم العثور على صفوف Invoicing Name = Miami Center.');
+  axPreview.textContent=`جاهز للرفع: ${axRows.length.toLocaleString()} صف Miami Center فقط.`;axPreview.className='status-msg ok';axUpload.disabled=false;
+ }catch(e){axPreview.textContent='خطأ: '+e.message;axPreview.className='status-msg err';}
+};
+async function replace(table,rows,button,status,count,fileInput){
+ button.disabled=true;button.textContent='جاري الرفع...';status.textContent='';status.className='status-msg';
+ try{
+   // Validation has already finished BEFORE deleting old data.
+   const del=await sb.from(table).delete().gt('id',0);if(del.error)throw del.error;
+   const CHUNK=500;
+   for(let i=0;i<rows.length;i+=CHUNK){const q=await sb.from(table).insert(rows.slice(i,i+CHUNK));if(q.error)throw q.error;}
+   status.textContent=`تم استبدال البيانات بنجاح: ${rows.length.toLocaleString()} صف.`;status.className='status-msg ok';
+   count.textContent=rows.length+' صف';fileInput.value='';
+ }catch(e){status.textContent='حدث خطأ: '+e.message;status.className='status-msg err';}
+ finally{button.disabled=false;button.textContent=table==='archive_mdp_rows'?'رفع واستبدال بيانات MDP':'رفع واستبدال بيانات AX';}
+}
+mdpUpload.onclick=()=>replace('archive_mdp_rows',mdpRows,mdpUpload,mdpStatus,mdpCount,mdpFile);
+axUpload.onclick=()=>replace('archive_ax_rows',axRows,axUpload,axStatus,axCount,axFile);
+logoutLink.onclick=async e=>{e.preventDefault();await sb.auth.signOut();location.href='index.html';};
+init();
+</script></body></html>
