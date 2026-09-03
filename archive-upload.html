@@ -86,7 +86,7 @@ mdpFile.onchange=async()=>{
   mdpRows=data.map(r=>({
     brand:String(col(r,3)).trim(),partner:String(col(r,1)).trim(),
     customer_name:String(col(r,5)).trim(),customer_code:String(col(r,6)).trim(),
-    value:num(col(r,17)),month:String(col(r,30)).trim()
+    value:num(col(r,21)),month:String(col(r,30)).trim()
   })).filter(r=>r.brand&&r.partner&&r.month);
   if(!mdpRows.length)throw Error('لم يتم العثور على صفوف صالحة.');
   mdpPreview.textContent=`جاهز للرفع: ${mdpRows.length.toLocaleString()} صف صالح.`;mdpPreview.className='status-msg ok';mdpUpload.disabled=false;
