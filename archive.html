@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Archive — MDP Data</title>
+<title>Achievement — MDP Data</title>
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -18,7 +18,7 @@
   </aside>
 
   <main class="main archive-main">
-    <h1>Archive</h1>
+    <h1>Achievement</h1>
     <p class="subtitle" id="subtitle">اختار البراند ثم البارتنرز والشهور لعرض التقرير.</p>
 
     <div class="panel archive-filters">
@@ -57,7 +57,7 @@
 
     <div class="panel">
       <div class="panel-header">
-        <span>Archive Report</span>
+        <span>Achievement Report</span>
         <span class="badge" id="grandBadge">0</span>
       </div>
       <div class="table-wrap archive-table-wrap" id="tableWrap">
@@ -70,7 +70,7 @@
 <script>
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const monthOrder = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-let userProfile=null, allMdp=[], allAx=[], selectedPartners=new Set(), selectedMonths=new Set(), reportRows=[], reportMonths=[];
+let userProfile=null, currentSession=null, currentMdp=[], currentAx=[], selectedPartners=new Set(), selectedMonths=new Set(), reportRows=[], reportMonths=[];
 
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const norm=x=>String(x??'').trim().toLowerCase();
@@ -110,37 +110,51 @@ async function fetchAll(table, select, filters=[]){
 async function init(){
   const {data:{session}}=await sb.auth.getSession();
   if(!session){location.href='index.html';return;}
+  currentSession=session;
   const {data:p,error}=await sb.from('profiles').select('is_admin,email,display_name').eq('id',session.user.id).single();
   if(error||!p){location.href='index.html';return;}
   userProfile=p;
   whoBox.textContent=p.display_name||p.email||session.user.email;
   navBox.innerHTML=p.is_admin?`
     <a href="admin.html">رفع الداتا</a>
-    <a href="archive-upload.html">رفع بيانات Archive</a>
+    <a href="archive-upload.html">رفع بيانات Achievement</a>
     <a href="brands.html">البراندات والبارتنرز</a>
     <a href="users.html">المستخدمين والصلاحيات</a>
-    <a class="active" href="archive.html">Archive</a>
+    <a class="active" href="archive.html">Achievement</a>
     <a href="profile.html">تغيير كلمة المرور</a>`:
     `<a href="dashboard.html">بياناتي</a>
-     <a class="active" href="archive.html">Archive</a>
+     <a class="active" href="archive.html">Achievement</a>
      <a href="profile.html">تغيير كلمة المرور</a>`;
 
-  loadingText.textContent='جاري تحميل البيانات المتاحة...';
+  // بنجيب قائمة البراندات بس (خفيفة وسريعة) بدل ما نجيب كل صفوف الـ Achievement
+  // من الجداول الكبيرة قبل ما اليوزر يختار براند أصلًا.
+  loadingText.textContent='جاري تحميل قائمة البراندات...';
   try{
-    allMdp=await fetchAll('archive_mdp_rows','brand,partner,customer_name,customer_code,value,month');
-    allAx=await fetchAll('archive_ax_rows','brand,invoice_date,net_sales');
-    const brands=[...new Map(allMdp.map(r=>[norm(r.brand),String(r.brand).trim()])).values()];
-    // Include AX-only brands only for admins/authorized RLS.
-    allAx.forEach(r=>{if(r.brand && !brands.some(b=>norm(b)===norm(r.brand))) brands.push(String(r.brand).trim());});
-    brands.sort((a,b)=>a.localeCompare(b));
-    brandSelect.innerHTML='<option value="">اختر Brand</option>'+brands.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
-    subtitle.textContent=brands.length?'اختار Brand لعرض الـ Archive المتاح حسب صلاحياتك.':'لا توجد بيانات Archive متاحة لحسابك حاليًا.';
+    let brandNames=[];
+    if(p.is_admin){
+      const {data:b,error:be}=await sb.from('brands').select('name').order('name');
+      if(be) throw be;
+      brandNames=(b||[]).map(x=>String(x.name).trim());
+    }else{
+      const {data:perm,error:pe}=await sb.from('permissions').select('value').eq('user_id',session.user.id).eq('perm_type','brand');
+      if(pe) throw pe;
+      const hasAll=(perm||[]).some(x=>x.value==='*');
+      if(hasAll){
+        const {data:b}=await sb.from('brands').select('name').order('name');
+        brandNames=(b||[]).map(x=>String(x.name).trim());
+      }else{
+        brandNames=[...new Set((perm||[]).map(x=>String(x.value).trim()))];
+      }
+    }
+    brandNames.sort((a,b)=>a.localeCompare(b));
+    brandSelect.innerHTML='<option value="">اختر Brand</option>'+brandNames.map(b=>`<option value="${esc(b)}">${esc(b)}</option>`).join('');
+    subtitle.textContent=brandNames.length?'اختار Brand لعرض الـ Achievement المتاح حسب صلاحياتك.':'لا توجد بيانات Achievement متاحة لحسابك حاليًا.';
   }catch(e){tableWrap.innerHTML='<div class="empty-state">خطأ: '+esc(e.message)+'</div>';}
   finally{loadingText.textContent='';}
 }
 function currentBrand(){return brandSelect.value;}
-function mdpForBrand(){let b=norm(currentBrand());return allMdp.filter(r=>norm(r.brand)===b);}
-function axForBrand(){let b=norm(currentBrand());return allAx.filter(r=>norm(r.brand)===b);}
+function mdpForBrand(){return currentMdp;}
+function axForBrand(){return currentAx;}
 function availablePartners(){
   return [...new Map(mdpForBrand().map(r=>[norm(r.partner),String(r.partner).trim()])).values()].sort((a,b)=>a.localeCompare(b));
 }
@@ -191,11 +205,28 @@ function refreshMonths(){
   if(keep.length) keep.forEach(x=>selectedMonths.add(x)); else v.forEach(x=>selectedMonths.add(x));
   renderMulti('month',v,selectedMonths,'monthOptions','monthSummary');
 }
-brandSelect.onchange=()=>{
-  if(!currentBrand()){partnerOptions.innerHTML='';monthOptions.innerHTML='';tableWrap.innerHTML='<div class="empty-state">اختر Brand لعرض التقرير.</div>';return;}
+brandSelect.onchange=async ()=>{
+  const b=currentBrand();
+  currentMdp=[]; currentAx=[];
+  if(!b){partnerOptions.innerHTML='';monthOptions.innerHTML='';tableWrap.innerHTML='<div class="empty-state">اختر Brand لعرض التقرير.</div>';return;}
+  loadingText.textContent='جاري تحميل بيانات '+b+'...';
+  tableWrap.innerHTML='<div class="empty-state">جاري التحميل...</div>';
+  try{
+    const [m,a]=await Promise.all([
+      fetchAll('archive_mdp_rows','brand,partner,customer_name,customer_code,item_code,value,qty,month',[q=>q.eq('brand',b)]),
+      fetchAll('archive_ax_rows','brand,invoice_date,net_sales,qty',[q=>q.eq('brand',b)])
+    ]);
+    currentMdp=m; currentAx=a;
+  }catch(e){
+    loadingText.textContent='';
+    tableWrap.innerHTML='<div class="empty-state">خطأ: '+esc(e.message)+'</div>';
+    return;
+  }
+  loadingText.textContent='';
   refreshPartners();refreshMonths();renderReport();
 };
 function buildReport(){
+  const isMibro = norm(currentBrand())==='mibro';
   const partners=selectedPartners.size?[...selectedPartners].map(norm):availablePartners().map(norm);
   const months=selectedMonths.size?[...selectedMonths].map(normalizeMonth):availableMonths();
   const monthSet=new Set(months.map(norm));
@@ -205,9 +236,12 @@ function buildReport(){
   mdpForBrand().forEach(r=>{
     if(!partners.includes(norm(r.partner)))return;
     const m=normalizeMonth(r.month);if(!monthSet.has(norm(m)))return;
+    if(isMibro && norm(r.item_code).includes('bundle'))return; // استبعاد أي صف Item Code فيه "Bundle" لبراند Mibro
     const key=[r.partner,r.customer_name,r.customer_code].map(x=>String(x??'').trim()).join('\u0001');
     if(!map.has(key))map.set(key,{partner:String(r.partner??''),customer_name:String(r.customer_name??''),customer_code:String(r.customer_code??''),months:{}});
-    const o=map.get(key);o.months[m]=(o.months[m]||0)+num(r.value);
+    const o=map.get(key);
+    const metric=isMibro?num(r.qty):num(r.value); // Mibro: Qty بدل Value
+    o.months[m]=(o.months[m]||0)+metric;
   });
   reportRows=[...map.values()].sort((a,b)=>
     a.partner.localeCompare(b.partner)||a.customer_name.localeCompare(b.customer_name)||a.customer_code.localeCompare(b.customer_code)
@@ -218,7 +252,8 @@ function buildReport(){
     if(!r.invoice_date)return;
     const d=new Date(String(r.invoice_date)+'T00:00:00');if(isNaN(d))return;
     const m=monthOrder[d.getMonth()];if(!monthSet.has(norm(m)))return;
-    miami.months[m]=(miami.months[m]||0)+num(r.net_sales);
+    const metric=isMibro?num(r.qty):num(r.net_sales); // Mibro: Qty بدل Net Sales
+    miami.months[m]=(miami.months[m]||0)+metric;
   });
   const hasMiami=Object.values(miami.months).some(v=>v!==0);
   return {rows:reportRows,miami:hasMiami?miami:null,months:reportMonths};
@@ -250,8 +285,8 @@ downloadBtn.onclick=()=>{
   months.forEach(m=>{let v=data.reduce((s,r)=>s+num(r[m]),0);grand[m]=v;gt+=v;});grand['Grand Total']=gt;data.push(grand);
   const ws=XLSX.utils.json_to_sheet(data,{header:['Partner Name','Customer Name','Customer Code',...months,'Grand Total']});
   ws['!cols']=[{wch:24},{wch:28},{wch:18},...months.map(()=>({wch:14})),{wch:16}];
-  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Archive');
-  XLSX.writeFile(wb,`archive-${currentBrand()}-${new Date().toISOString().slice(0,10)}.xlsx`);
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Achievement');
+  XLSX.writeFile(wb,`achievement-${currentBrand()}-${new Date().toISOString().slice(0,10)}.xlsx`);
 };
 logoutLink.onclick=async e=>{e.preventDefault();await sb.auth.signOut();location.href='index.html';};
 init();

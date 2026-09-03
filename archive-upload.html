@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>رفع بيانات Archive — MDP Data</title>
+<title>رفع بيانات Achievement — MDP Data</title>
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -14,23 +14,23 @@
   <div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div>
   <nav>
     <a href="admin.html">رفع الداتا</a>
-    <a class="active" href="archive-upload.html">رفع بيانات Archive</a>
+    <a class="active" href="archive-upload.html">رفع بيانات Achievement</a>
     <a href="brands.html">البراندات والبارتنرز</a>
     <a href="users.html">المستخدمين والصلاحيات</a>
-    <a href="archive.html">Archive</a>
+    <a href="archive.html">Achievement</a>
     <a href="profile.html">تغيير كلمة المرور</a>
   </nav>
   <div class="who" id="whoBox"></div><a href="#" id="logoutLink" class="small">تسجيل الخروج</a>
 </aside>
 <main class="main">
-<h1>رفع بيانات Archive</h1>
+<h1>رفع بيانات Achievement</h1>
 <p class="subtitle">كل ملف مستقل. عند الرفع الناجح يتم استبدال بيانات المصدر القديم بالكامل بالبيانات الجديدة.</p>
 
 <div class="grid-2">
   <section class="panel">
     <div class="panel-header"><span>ملف MDP</span><span class="badge" id="mdpCount">0 صف</span></div>
     <div style="padding:20px">
-      <p class="muted small">Partner Name: B — Brand: D — Customer Name: F — Customer Code: G — Value: V — Month: AE</p>
+      <p class="muted small">Partner Name: B — Brand: D — Customer Name: F — Customer Code: G — Item Code: H — Qty: J — Value: V — Month: AE</p>
       <div class="upload-drop">اختر ملف MDP<input type="file" id="mdpFile" accept=".xlsx,.xls,.csv"></div>
       <div id="mdpPreview" class="status-msg"></div>
       <button class="btn" id="mdpUpload" disabled>رفع واستبدال بيانات MDP</button>
@@ -41,7 +41,7 @@
   <section class="panel">
     <div class="panel-header"><span>ملف AX / Miami Center</span><span class="badge" id="axCount">0 صف</span></div>
     <div style="padding:20px">
-      <p class="muted small">Brand: B — Invoice Date: D — Invoicing Name: J — Net Sales: T. يتم حفظ صفوف Miami Center فقط.</p>
+      <p class="muted small">Brand: B — Invoice Date: D — Invoicing Name: J — Qty: M — Net Sales: T. يتم حفظ صفوف Miami Center فقط.</p>
       <div class="upload-drop">اختر ملف AX<input type="file" id="axFile" accept=".xlsx,.xls,.csv"></div>
       <div id="axPreview" class="status-msg"></div>
       <button class="btn" id="axUpload" disabled>رفع واستبدال بيانات AX</button>
@@ -86,7 +86,9 @@ mdpFile.onchange=async()=>{
   mdpRows=data.map(r=>({
     brand:String(col(r,3)).trim(),partner:String(col(r,1)).trim(),
     customer_name:String(col(r,5)).trim(),customer_code:String(col(r,6)).trim(),
-    value:num(col(r,21)),month:String(col(r,30)).trim()
+    item_code:String(col(r,7)).trim(),
+    value:num(col(r,21)),qty:num(col(r,9)),
+    month:String(col(r,30)).trim()
   })).filter(r=>r.brand&&r.partner&&r.month);
   if(!mdpRows.length)throw Error('لم يتم العثور على صفوف صالحة.');
   mdpPreview.textContent=`جاهز للرفع: ${mdpRows.length.toLocaleString()} صف صالح.`;mdpPreview.className='status-msg ok';mdpUpload.disabled=false;
@@ -100,7 +102,7 @@ axFile.onchange=async()=>{
   const data=raw.slice(1).filter(r=>r.some(v=>String(v).trim()!==''));
   if(data.some(r=>r.length<20))throw Error('ملف AX لا يحتوي على الأعمدة المطلوبة حتى T.');
   axRows=data.filter(r=>norm(col(r,9))==='miami center').map(r=>{
-    const d=toDate(col(r,3));return {brand:String(col(r,1)).trim(),invoice_date:d?d.toISOString().slice(0,10):null,net_sales:num(col(r,19))};
+    const d=toDate(col(r,3));return {brand:String(col(r,1)).trim(),invoice_date:d?d.toISOString().slice(0,10):null,net_sales:num(col(r,19)),qty:num(col(r,12))};
   }).filter(r=>r.brand&&r.invoice_date);
   if(!axRows.length)throw Error('لم يتم العثور على صفوف Invoicing Name = Miami Center.');
   axPreview.textContent=`جاهز للرفع: ${axRows.length.toLocaleString()} صف Miami Center فقط.`;axPreview.className='status-msg ok';axUpload.disabled=false;
