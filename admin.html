@@ -1,16 +1,14 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>رفع الداتا — MDP Data</title>
 <link rel="stylesheet" href="style.css">
-<script type="text/javascript" src="https://gc.kes.v2.scr.kaspersky-labs.com/7EA5E9BB-55E1-4C31-9C21-4943DDFED2E4/main.js?attr=2sU12vRNxuhBGPKg7A8qcmd7L_N5zTCiBhpDiXDB8k8EKVJA7JawuvoJEpSrQXNHWdI3prFTr9qHNHEoQOOpQC7HsX1VCVoFpxKMAb4WOdGtcXnnJqrC9WIJ7jUyaami4oDSkyO2qgskELfpunOoRfjwEUuo7ETMnGF61_Y0jr4U6oCIxeE_wy5VuMcaND14Tpx5W0hBNW7pG-sdOMqnvzJE5mRfx88qfo563C3u5NyMbbdP6-huRVB-M9nqKhP46ug1XP0Q4jFqvVF19T3N2tt5OY_uXiqDC1gZZRtKsSJkx6FdBrWxLw2UJBj87yhC" charset="UTF-8"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="config.js"></script>
 </head>
 <body>
-
 <div class="app-shell">
   <aside class="sidebar">
     <div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div>
@@ -28,7 +26,7 @@
     <h1>رفع الداتا اليومية</h1>
     <p class="subtitle">
       رفع ملف جديد هيمسح كل الداتا القديمة ويستبدلها بالجديدة.
-      الملف المفروض يكون فيه 31 عمود — <b>عمود البارتنر هو التاني</b> و<b>عمود البراند هو الرابع</b>، بترتيبهم في الشيت.
+      Partner Name يؤخذ دائمًا من العمود B، وBrand من العمود D.
     </p>
 
     <div class="upload-drop">
@@ -43,7 +41,7 @@
           <span class="badge" id="previewCount">0 صف</span>
         </div>
         <p class="muted small" style="padding:10px 20px 0;">
-          عمود البارتنر المكتشف: <b id="detectedPartnerCol"></b> — عمود البراند المكتشف: <b id="detectedBrandCol"></b>
+          عمود البارتنر: <b id="detectedPartnerCol"></b> — عمود البراند: <b id="detectedBrandCol"></b>
         </p>
         <div class="table-wrap" id="previewTable"></div>
       </div>
@@ -52,10 +50,7 @@
     </div>
 
     <div class="panel" style="margin-top:24px;">
-      <div class="panel-header">
-        <span>آخر رفعة</span>
-        <span class="badge" id="currentCount">— </span>
-      </div>
+      <div class="panel-header"><span>آخر رفعة</span><span class="badge" id="currentCount">—</span></div>
       <div style="padding:14px 20px;" class="muted small" id="lastUploadInfo">جاري التحميل...</div>
     </div>
   </main>
@@ -63,126 +58,183 @@
 
 <script>
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-const PARTNER_COL_INDEX = 1; // العمود التاني (0-indexed)
-const BRAND_COL_INDEX = 3;   // العمود الرابع (0-indexed)
+const PARTNER_COL_INDEX = 1; // B
+const BRAND_COL_INDEX = 3;   // D
 
 let uploadRows = [];
 let uploadCols = [];
 
+/*
+  Excel الملف يحتوي على أسماء أعمدة مكررة مثل Partner Name.
+  لذلك ننشئ أسماء مفاتيح فريدة داخل row_data.
+  أول Partner Name (العمود B) يظل اسمه Partner Name،
+  وأي تكرار لاحق يصبح Partner Name (2)، Partner Name (3)... إلخ.
+*/
+function makeUniqueHeaders(headerRow){
+  const seen = {};
+  return headerRow.map((raw, i) => {
+    let base = String(raw ?? '').trim() || `عمود ${i + 1}`;
+    seen[base] = (seen[base] || 0) + 1;
+    return seen[base] === 1 ? base : `${base} (${seen[base]})`;
+  });
+}
+
 async function init(){
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if(!session){ window.location.href = 'index.html'; return; }
-  const { data: profile } = await supabaseClient.from('profiles').select('is_admin, email, display_name').eq('id', session.user.id).single();
-  if(!profile || !profile.is_admin){ window.location.href = 'dashboard.html'; return; }
-  document.getElementById('whoBox').textContent = (profile.display_name || profile.email) + ' (أدمن)';
+  const {data:{session}} = await supabaseClient.auth.getSession();
+  if(!session){ location.href='index.html'; return; }
+
+  const {data:profile} = await supabaseClient.from('profiles')
+    .select('is_admin,email,display_name').eq('id',session.user.id).single();
+
+  if(!profile || !profile.is_admin){ location.href='dashboard.html'; return; }
+
+  document.getElementById('whoBox').textContent =
+    (profile.display_name || profile.email) + ' (أدمن)';
   loadLastUpload();
 }
-document.getElementById('logoutLink').addEventListener('click', async (e) => {
+
+document.getElementById('logoutLink').addEventListener('click', async e=>{
   e.preventDefault();
   await supabaseClient.auth.signOut();
-  window.location.href = 'index.html';
+  location.href='index.html';
 });
 
-document.getElementById('fileInput').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
+document.getElementById('fileInput').addEventListener('change', async e=>{
+  const file=e.target.files[0];
   if(!file) return;
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: 'array' });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const json = XLSX.utils.sheet_to_json(sheet, { defval: '', header: 1 });
 
-  if(json.length < 2){ alert('الملف فاضي أو مفيهوش صفوف بيانات.'); return; }
+  const buf=await file.arrayBuffer();
+  const wb=XLSX.read(buf,{type:'array'});
+  const sheet=wb.Sheets[wb.SheetNames[0]];
+  const json=XLSX.utils.sheet_to_json(sheet,{defval:'',header:1});
 
-  const headerRow = json[0];
-  const dataRows = json.slice(1);
+  if(json.length<2){
+    alert('الملف فاضي أو مفيهوش صفوف بيانات.');
+    return;
+  }
 
-  if(headerRow.length < 4){ alert('الملف لازم يحتوي على 4 أعمدة على الأقل (البارتنر والبراند فيهم).'); return; }
+  const originalHeaders=json[0];
+  const dataRows=json.slice(1);
 
-  uploadCols = headerRow;
-  uploadRows = dataRows.map(rowArr => {
-    const obj = {};
-    headerRow.forEach((h, i) => obj[h || `عمود ${i+1}`] = rowArr[i] ?? '');
+  if(originalHeaders.length<4){
+    alert('الملف لازم يحتوي على 4 أعمدة على الأقل.');
+    return;
+  }
+
+  // أسماء فريدة لحفظ row_data بدون overwrite.
+  uploadCols=makeUniqueHeaders(originalHeaders);
+
+  uploadRows=dataRows.map(rowArr=>{
+    const obj={};
+    uploadCols.forEach((key,i)=>obj[key]=rowArr[i] ?? '');
+
     return {
-      __brand: String(rowArr[BRAND_COL_INDEX] ?? '').trim(),
-      __partner: String(rowArr[PARTNER_COL_INDEX] ?? '').trim(),
-      data: obj
+      // الصلاحيات تعتمد على الموضع الحقيقي B و D وليس على اسم Header.
+      __brand:String(rowArr[BRAND_COL_INDEX] ?? '').trim(),
+      __partner:String(rowArr[PARTNER_COL_INDEX] ?? '').trim(),
+      data:obj
     };
-  }).filter(r => r.__brand || r.__partner);
+  }).filter(r=>r.__brand || r.__partner);
 
-  document.getElementById('detectedPartnerCol').textContent = headerRow[PARTNER_COL_INDEX] || `عمود ${PARTNER_COL_INDEX+1}`;
-  document.getElementById('detectedBrandCol').textContent = headerRow[BRAND_COL_INDEX] || `عمود ${BRAND_COL_INDEX+1}`;
+  document.getElementById('detectedPartnerCol').textContent =
+    `${originalHeaders[PARTNER_COL_INDEX] || 'عمود B'} (B)`;
 
-  document.getElementById('previewBox').style.display = 'block';
-  document.getElementById('previewCount').textContent = uploadRows.length + ' صف';
-  renderPreview(uploadRows.slice(0, 15), uploadCols);
+  document.getElementById('detectedBrandCol').textContent =
+    `${originalHeaders[BRAND_COL_INDEX] || 'عمود D'} (D)`;
+
+  document.getElementById('previewBox').style.display='block';
+  document.getElementById('previewCount').textContent=uploadRows.length+' صف';
+  renderPreview(uploadRows.slice(0,15),uploadCols);
 });
 
-function renderPreview(rows, cols){
-  let html = '<table><thead><tr>';
-  cols.forEach(c => html += `<th>${escapeHtml(c)}</th>`);
-  html += '</tr></thead><tbody>';
-  rows.forEach(r => {
-    html += '<tr>';
-    cols.forEach(c => html += `<td>${escapeHtml(r.data[c])}</td>`);
-    html += '</tr>';
+function renderPreview(rows,cols){
+  let html='<table><thead><tr>';
+  cols.forEach(c=>html+=`<th>${escapeHtml(c)}</th>`);
+  html+='</tr></thead><tbody>';
+
+  rows.forEach(r=>{
+    html+='<tr>';
+    cols.forEach(c=>html+=`<td>${escapeHtml(r.data[c] ?? '')}</td>`);
+    html+='</tr>';
   });
-  html += '</tbody></table>';
-  document.getElementById('previewTable').innerHTML = html;
+
+  html+='</tbody></table>';
+  document.getElementById('previewTable').innerHTML=html;
 }
 
 function escapeHtml(v){
-  return String(v).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  return String(v).replace(/[&<>"']/g,m=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[m]));
 }
 
-document.getElementById('confirmUploadBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('confirmUploadBtn');
-  const status = document.getElementById('uploadStatus');
-  btn.disabled = true; btn.textContent = 'جاري الرفع...';
-  status.textContent = ''; status.className = 'status-msg';
+document.getElementById('confirmUploadBtn').addEventListener('click',async()=>{
+  const btn=document.getElementById('confirmUploadBtn');
+  const status=document.getElementById('uploadStatus');
+
+  btn.disabled=true;
+  btn.textContent='جاري الرفع...';
+  status.textContent='';
+  status.className='status-msg';
 
   try{
-    const { error: delErr } = await supabaseClient.from('data_rows').delete().gt('id', 0);
+    const {error:delErr}=await supabaseClient.from('data_rows').delete().gt('id',0);
     if(delErr) throw delErr;
 
-    const payload = uploadRows.map(r => ({ brand: r.__brand, partner: r.__partner, row_data: r.data }));
-    const chunkSize = 400;
-    for(let i = 0; i < payload.length; i += chunkSize){
-      const { error: insErr } = await supabaseClient.from('data_rows').insert(payload.slice(i, i + chunkSize));
+    const payload=uploadRows.map(r=>({
+      brand:r.__brand,
+      partner:r.__partner,
+      row_data:r.data
+    }));
+
+    const chunkSize=400;
+    for(let i=0;i<payload.length;i+=chunkSize){
+      const {error:insErr}=await supabaseClient
+        .from('data_rows')
+        .insert(payload.slice(i,i+chunkSize));
       if(insErr) throw insErr;
     }
 
-    const { error: colErr } = await supabaseClient.from('data_columns').upsert({
-      id: 1, columns: uploadCols,
-      brand_col_index: BRAND_COL_INDEX + 1,
-      partner_col_index: PARTNER_COL_INDEX + 1,
-      updated_at: new Date().toISOString()
+    const {error:colErr}=await supabaseClient.from('data_columns').upsert({
+      id:1,
+      columns:uploadCols,
+      brand_col_index:BRAND_COL_INDEX+1,
+      partner_col_index:PARTNER_COL_INDEX+1,
+      updated_at:new Date().toISOString()
     });
     if(colErr) throw colErr;
 
-    status.textContent = `تم رفع ${uploadRows.length} صف بنجاح.`;
+    status.textContent=`تم رفع ${uploadRows.length} صف بنجاح.`;
     status.classList.add('ok');
-    document.getElementById('previewBox').style.display = 'none';
-    document.getElementById('fileInput').value = '';
+
+    document.getElementById('previewBox').style.display='none';
+    document.getElementById('fileInput').value='';
     loadLastUpload();
   }catch(err){
-    status.textContent = 'حصل خطأ أثناء الرفع: ' + err.message;
+    console.error(err);
+    status.textContent='حصل خطأ أثناء الرفع: '+err.message;
     status.classList.add('err');
   }finally{
-    btn.disabled = false; btn.textContent = 'تأكيد الرفع واستبدال الداتا';
+    btn.disabled=false;
+    btn.textContent='تأكيد الرفع واستبدال الداتا';
   }
 });
 
 async function loadLastUpload(){
-  const { count } = await supabaseClient.from('data_rows').select('id', { count: 'exact', head: true });
-  const { data: colsRow } = await supabaseClient.from('data_columns').select('updated_at').eq('id', 1).single();
-  document.getElementById('currentCount').textContent = (count ?? 0) + ' صف';
-  document.getElementById('lastUploadInfo').textContent = colsRow && colsRow.updated_at
-    ? 'آخر تحديث: ' + new Date(colsRow.updated_at).toLocaleString('ar-EG')
-    : 'لسه معملتش أي رفعة.';
+  const {count}=await supabaseClient.from('data_rows')
+    .select('id',{count:'exact',head:true});
+
+  const {data:colsRow}=await supabaseClient.from('data_columns')
+    .select('updated_at').eq('id',1).single();
+
+  document.getElementById('currentCount').textContent=(count ?? 0)+' صف';
+  document.getElementById('lastUploadInfo').textContent=
+    colsRow?.updated_at
+      ? 'آخر تحديث: '+new Date(colsRow.updated_at).toLocaleString('ar-EG')
+      : 'لسه معملتش أي رفعة.';
 }
 
 init();
 </script>
-
 </body>
 </html>
