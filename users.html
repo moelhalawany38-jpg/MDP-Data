@@ -1,132 +1,459 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>المستخدمين والصلاحيات — MDP Data</title>
 <link rel="stylesheet" href="style.css">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script>
-</head><body>
-<div class="app-shell"><aside class="sidebar">
-<div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div>
-<nav><a href="admin.html">رفع الداتا</a><a href="brands.html">البراندات والبارتنرز</a><a href="users.html" class="active">المستخدمين والصلاحيات</a><a href="profile.html">تغيير كلمة المرور</a></nav>
-<div class="who" id="whoBox"></div><a href="#" id="logoutLink" class="small">تسجيل الخروج</a>
-</aside><main class="main">
-<h1>المستخدمين والصلاحيات</h1>
-<p class="subtitle">أنشئ حسابًا ثم أعطه صلاحيات مركبة: كل صلاحية = Brand + Partner Name.</p>
-<div class="grid-2">
-<div class="panel"><div class="panel-header">إنشاء مستخدم جديد</div><div style="padding:16px 20px;">
-<div class="field"><label>اسم المستخدم (إنجليزي ومن غير مسافات)</label><input id="newUsername" type="text" placeholder="مثال: ahmed.sales"></div>
-<div class="field"><label>كلمة المرور</label><input id="newPassword" type="text" placeholder="6 أحرف على الأقل"></div>
-<div class="field"><label>الاسم (اختياري)</label><input id="newDisplayName" type="text" placeholder="مثال: أحمد محمد"></div>
-<button class="btn" id="createUserBtn">إنشاء الحساب</button><div class="status-msg" id="createUserStatus"></div>
-</div></div>
-<div class="panel"><div class="panel-header">المستخدمين الحاليين</div><div id="usersList"><div class="empty-state">جاري التحميل...</div></div></div>
-</div></main></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<style>
+.permission-mode{margin:10px 0 18px;display:flex;gap:8px;flex-wrap:wrap}
+.permission-mode button.active{font-weight:bold}
+.check-list{max-height:260px;overflow:auto;border:1px solid #ddd;border-radius:8px;padding:10px;margin-top:10px}
+.check-item{display:flex;align-items:center;gap:8px;padding:7px 4px}
+.check-actions{display:flex;gap:8px;margin-top:10px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:16px;border:1px solid #ddd;margin:4px}
+.remove-perm-btn{border:0;background:transparent;cursor:pointer;font-size:18px;line-height:1}
+</style>
+</head>
+<body>
+<div class="app-shell">
+<aside class="sidebar">
+  <div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div>
+  <nav>
+    <a href="admin.html">رفع الداتا</a>
+    <a href="brands.html">البراندات والبارتنرز</a>
+    <a href="users.html" class="active">المستخدمين والصلاحيات</a>
+    <a href="profile.html">تغيير كلمة المرور</a>
+  </nav>
+  <div class="who" id="whoBox"></div>
+  <a href="#" id="logoutLink" class="small">تسجيل الخروج</a>
+</aside>
 
-<div id="permModal" style="display:none;position:fixed;inset:0;background:rgba(20,25,20,.4);align-items:center;justify-content:center;z-index:50;">
-<div class="panel" style="width:100%;max-width:560px;">
-<div class="panel-header"><span id="modalUserLabel">صلاحيات المستخدم</span><button class="btn-outline btn btn-sm" id="closeModalBtn">إغلاق</button></div>
-<div style="padding:18px 20px;">
-<p class="muted small">اختر Brand وPartner معًا ثم اضغط إضافة. المستخدم سيرى فقط الصفوف المطابقة لهذا الزوج.</p>
-<div class="inline-form" style="margin-bottom:18px;">
-<select id="modalBrandSelect"><option value="">اختار براند...</option></select>
-<select id="modalPartnerSelect"><option value="">اختار بارتنر...</option></select>
-<button class="btn btn-sm" id="modalAddPairBtn" style="width:auto;">إضافة الصلاحية</button>
+<main class="main">
+<h1>المستخدمين والصلاحيات</h1>
+<p class="subtitle">كل صلاحية تربط Brand بـ Partner Name، ويمكن إضافة عدة صلاحيات مرة واحدة.</p>
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="panel-header">إنشاء مستخدم جديد</div>
+    <div style="padding:16px 20px;">
+      <div class="field"><label>اسم المستخدم</label><input id="newUsername" placeholder="مثال: ahmed.sales"></div>
+      <div class="field"><label>كلمة المرور</label><input id="newPassword" type="password" placeholder="6 أحرف على الأقل"></div>
+      <div class="field"><label>الاسم (اختياري)</label><input id="newDisplayName" placeholder="مثال: أحمد محمد"></div>
+      <button class="btn" id="createUserBtn">إنشاء الحساب</button>
+      <div class="status-msg" id="createUserStatus"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header">المستخدمين الحاليين</div>
+    <div id="usersList"><div class="empty-state">جاري التحميل...</div></div>
+  </div>
 </div>
-<div id="modalStatus" class="status-msg"></div>
-<div id="modalPermissionChips" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
-</div></div></div>
+</main>
+</div>
+
+<!-- نافذة إدارة الصلاحيات -->
+<div id="permModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:center;justify-content:center;z-index:100;">
+  <div class="panel" style="width:min(720px,94vw);max-height:90vh;overflow:auto;">
+    <div class="panel-header">
+      <span id="modalUserLabel">إدارة الصلاحيات</span>
+      <button class="btn-outline btn btn-sm" id="closeModalBtn">إغلاق</button>
+    </div>
+
+    <div style="padding:18px 20px;">
+      <p class="muted small">اختر الطريقة المناسبة لإضافة عدة صلاحيات مرة واحدة.</p>
+
+      <div class="permission-mode">
+        <button class="btn btn-sm active" id="modeBrandBtn">Brand ← اختر Partners</button>
+        <button class="btn btn-outline btn-sm" id="modePartnerBtn">Partner ← اختر Brands</button>
+      </div>
+
+      <!-- Brand ثم Partners -->
+      <div id="brandMode">
+        <div class="field">
+          <label>اختار Brand</label>
+          <select id="brandSelect"><option value="">اختار Brand...</option></select>
+        </div>
+        <div id="partnersBox" style="display:none;">
+          <label>اختار Partner أو أكثر</label>
+          <div class="check-actions">
+            <button class="btn btn-outline btn-sm" id="selectAllPartners">اختيار الكل</button>
+            <button class="btn btn-outline btn-sm" id="clearPartners">إلغاء الكل</button>
+          </div>
+          <div class="check-list" id="partnersChecklist"></div>
+          <button class="btn" id="saveBrandPartnersBtn" style="margin-top:14px;">إضافة الصلاحيات المختارة</button>
+        </div>
+      </div>
+
+      <!-- Partner ثم Brands -->
+      <div id="partnerMode" style="display:none;">
+        <div class="field">
+          <label>اختار Partner</label>
+          <select id="partnerSelect"><option value="">اختار Partner...</option></select>
+        </div>
+        <div id="brandsBox" style="display:none;">
+          <label>اختار Brand أو أكثر</label>
+          <div class="check-actions">
+            <button class="btn btn-outline btn-sm" id="selectAllBrands">اختيار الكل</button>
+            <button class="btn btn-outline btn-sm" id="clearBrands">إلغاء الكل</button>
+          </div>
+          <div class="check-list" id="brandsChecklist"></div>
+          <button class="btn" id="savePartnerBrandsBtn" style="margin-top:14px;">إضافة الصلاحيات المختارة</button>
+        </div>
+      </div>
+
+      <div id="modalStatus" class="status-msg"></div>
+
+      <hr style="margin:22px 0;">
+      <h3 style="margin-bottom:8px;">الصلاحيات الحالية</h3>
+      <div id="modalPermissionChips"></div>
+    </div>
+  </div>
+</div>
 
 <script>
-const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
-let allBrands=[],allPartners=[],modalUserId=null;
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let allBrands = [], allPartners = [], modalUserId = null;
 
-function esc(v){return String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
-
-async function init(){
- const {data:{session}}=await supabaseClient.auth.getSession();
- if(!session){location.href='index.html';return;}
- const {data:profile}=await supabaseClient.from('profiles').select('is_admin,email,display_name').eq('id',session.user.id).single();
- if(!profile||!profile.is_admin){location.href='dashboard.html';return;}
- document.getElementById('whoBox').textContent=(profile.display_name||profile.email)+' (أدمن)';
- await loadBrandPartnerOptions(); await loadUsers();
+function esc(v){
+  return String(v ?? '').replace(/[&<>"']/g,m=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[m]));
 }
 
-async function loadBrandPartnerOptions(){
- const [{data:brands},{data:partners}]=await Promise.all([
-  supabaseClient.from('brands').select('name').order('name'),
-  supabaseClient.from('partners').select('name').order('name')
- ]);
- allBrands=brands||[]; allPartners=partners||[];
- document.getElementById('modalBrandSelect').innerHTML='<option value="">اختار براند...</option>'+allBrands.map(b=>`<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
- document.getElementById('modalPartnerSelect').innerHTML='<option value="">اختار بارتنر...</option>'+allPartners.map(p=>`<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
+async function init(){
+  const {data:{session}} = await supabaseClient.auth.getSession();
+  if(!session){ location.href='index.html'; return; }
+
+  const {data:profile} = await supabaseClient.from('profiles')
+    .select('is_admin,email,display_name')
+    .eq('id',session.user.id).single();
+
+  if(!profile || !profile.is_admin){ location.href='dashboard.html'; return; }
+
+  document.getElementById('whoBox').textContent =
+    (profile.display_name || profile.email) + ' (أدمن)';
+
+  await loadOptions();
+  await loadUsers();
+}
+
+async function loadOptions(){
+  const [{data:brands,error:brandError},{data:partners,error:partnerError}] = await Promise.all([
+    supabaseClient.from('brands').select('name').order('name'),
+    supabaseClient.from('partners').select('name').order('name')
+  ]);
+
+  if(brandError || partnerError){
+    console.error(brandError || partnerError);
+    return;
+  }
+
+  allBrands = brands || [];
+  allPartners = partners || [];
+
+  document.getElementById('brandSelect').innerHTML =
+    '<option value="">اختار Brand...</option>' +
+    allBrands.map(b=>`<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
+
+  document.getElementById('partnerSelect').innerHTML =
+    '<option value="">اختار Partner...</option>' +
+    allPartners.map(p=>`<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
 }
 
 async function loadUsers(){
- const [{data:profiles,error:pErr},{data:perms,error:permErr}]=await Promise.all([
-  supabaseClient.from('profiles').select('id,email,display_name,is_admin').order('created_at',{ascending:false}),
-  supabaseClient.from('user_permissions').select('user_id,brand,partner_name')
- ]);
- if(pErr||permErr){document.getElementById('usersList').innerHTML='<div class="empty-state">حصل خطأ في تحميل المستخدمين أو الصلاحيات.</div>';return;}
- const map={}; (perms||[]).forEach(x=>{(map[x.user_id]??=[]).push(x.brand+' + '+x.partner_name);});
- const list=document.getElementById('usersList');
- if(!profiles?.length){list.innerHTML='<div class="empty-state">لسه مفيش مستخدمين.</div>';return;}
- list.innerHTML=profiles.map(p=>{
-  const summary=(map[p.id]||[]).join(' — ')||'مفيش صلاحيات مركبة محددة';
-  return `<div class="list-row"><div><div>${esc(p.display_name||p.email)}${p.is_admin?' <span class="badge">أدمن</span>':''}</div><div class="muted small">${esc(summary)}</div></div>
-  ${p.is_admin?'':`<button class="btn btn-outline btn-sm manage-btn" data-id="${p.id}" data-label="${esc(p.display_name||p.email)}">إدارة الصلاحيات</button>`}</div>`;
- }).join('');
- document.querySelectorAll('.manage-btn').forEach(b=>b.addEventListener('click',()=>openPermModal(b.dataset.id,b.dataset.label)));
+  const [{data:profiles,error:pError},{data:perms,error:permError}] = await Promise.all([
+    supabaseClient.from('profiles')
+      .select('id,email,display_name,is_admin')
+      .order('created_at',{ascending:false}),
+    supabaseClient.from('user_permissions')
+      .select('user_id,brand,partner_name')
+  ]);
+
+  if(pError || permError){
+    document.getElementById('usersList').innerHTML =
+      '<div class="empty-state">حصل خطأ في تحميل المستخدمين.</div>';
+    console.error(pError || permError);
+    return;
+  }
+
+  const permissionMap = {};
+  (perms || []).forEach(p=>{
+    (permissionMap[p.user_id] ||= []).push(`${p.brand} + ${p.partner_name}`);
+  });
+
+  const list = document.getElementById('usersList');
+
+  if(!profiles || !profiles.length){
+    list.innerHTML='<div class="empty-state">لسه مفيش مستخدمين.</div>';
+    return;
+  }
+
+  list.innerHTML = profiles.map(p=>{
+    const summary = (permissionMap[p.id] || []).join(' — ') || 'مفيش صلاحيات';
+    return `
+      <div class="list-row">
+        <div>
+          <div>${esc(p.display_name || p.email)}
+            ${p.is_admin ? '<span class="badge">أدمن</span>' : ''}
+          </div>
+          <div class="muted small">${esc(summary)}</div>
+        </div>
+        ${p.is_admin ? '' :
+          `<button class="btn btn-outline btn-sm manage-btn"
+            data-id="${p.id}"
+            data-label="${esc(p.display_name || p.email)}">
+            إدارة الصلاحيات
+          </button>`
+        }
+      </div>`;
+  }).join('');
+
+  document.querySelectorAll('.manage-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>openPermissionModal(btn.dataset.id,btn.dataset.label));
+  });
 }
 
-async function openPermModal(id,label){
- modalUserId=id; document.getElementById('modalUserLabel').textContent='صلاحيات: '+label;
- document.getElementById('permModal').style.display='flex'; await renderModalPermissions();
-}
-async function renderModalPermissions(){
- const {data:perms,error}=await supabaseClient.from('user_permissions').select('id,brand,partner_name').eq('user_id',modalUserId).order('brand');
- const box=document.getElementById('modalPermissionChips');
- if(error){box.innerHTML='<span class="status-msg err">'+esc(error.message)+'</span>';return;}
- box.innerHTML=perms?.length?perms.map(p=>`<span class="chip">${esc(p.brand)} + ${esc(p.partner_name)} <button class="remove-perm-btn" data-id="${p.id}">×</button></span>`).join(''):'<span class="muted small">مفيش صلاحيات مضافة لسه.</span>';
- document.querySelectorAll('.remove-perm-btn').forEach(b=>b.addEventListener('click',async()=>{
-   const {error}=await supabaseClient.from('user_permissions').delete().eq('id',b.dataset.id);
-   if(error)alert(error.message); await renderModalPermissions(); await loadUsers();
- }));
+async function openPermissionModal(userId,label){
+  modalUserId = userId;
+  document.getElementById('modalUserLabel').textContent = 'صلاحيات: ' + label;
+  document.getElementById('modalStatus').textContent = '';
+
+  document.getElementById('brandSelect').value='';
+  document.getElementById('partnerSelect').value='';
+  document.getElementById('partnersBox').style.display='none';
+  document.getElementById('brandsBox').style.display='none';
+
+  document.getElementById('permModal').style.display='flex';
+  await renderCurrentPermissions();
 }
 
-document.getElementById('modalAddPairBtn').addEventListener('click',async()=>{
- const brand=document.getElementById('modalBrandSelect').value;
- const partner_name=document.getElementById('modalPartnerSelect').value;
- const status=document.getElementById('modalStatus'); status.textContent='';
- if(!brand||!partner_name){status.textContent='اختار Brand وPartner.';status.className='status-msg err';return;}
- const {error}=await supabaseClient.from('user_permissions').insert({user_id:modalUserId,brand,partner_name});
- if(error){status.textContent=error.message.includes('duplicate')?'الصلاحية دي موجودة بالفعل.':error.message;status.className='status-msg err';return;}
- document.getElementById('modalBrandSelect').value='';document.getElementById('modalPartnerSelect').value='';
- status.textContent='تمت إضافة الصلاحية.';status.className='status-msg ok';
- await renderModalPermissions();await loadUsers();
+function showBrandMode(){
+  document.getElementById('brandMode').style.display='block';
+  document.getElementById('partnerMode').style.display='none';
+  document.getElementById('modeBrandBtn').classList.add('active');
+  document.getElementById('modePartnerBtn').classList.remove('active');
+}
+
+function showPartnerMode(){
+  document.getElementById('brandMode').style.display='none';
+  document.getElementById('partnerMode').style.display='block';
+  document.getElementById('modePartnerBtn').classList.add('active');
+  document.getElementById('modeBrandBtn').classList.remove('active');
+}
+
+document.getElementById('modeBrandBtn').addEventListener('click',showBrandMode);
+document.getElementById('modePartnerBtn').addEventListener('click',showPartnerMode);
+
+document.getElementById('brandSelect').addEventListener('change',e=>{
+  const box=document.getElementById('partnersBox');
+  if(!e.target.value){ box.style.display='none'; return; }
+
+  document.getElementById('partnersChecklist').innerHTML =
+    allPartners.map((p,i)=>`
+      <label class="check-item">
+        <input type="checkbox" class="partner-check" value="${esc(p.name)}">
+        ${esc(p.name)}
+      </label>`).join('');
+
+  box.style.display='block';
 });
+
+document.getElementById('partnerSelect').addEventListener('change',e=>{
+  const box=document.getElementById('brandsBox');
+  if(!e.target.value){ box.style.display='none'; return; }
+
+  document.getElementById('brandsChecklist').innerHTML =
+    allBrands.map(b=>`
+      <label class="check-item">
+        <input type="checkbox" class="brand-check" value="${esc(b.name)}">
+        ${esc(b.name)}
+      </label>`).join('');
+
+  box.style.display='block';
+});
+
+function setChecks(selector,value){
+  document.querySelectorAll(selector).forEach(x=>x.checked=value);
+}
+
+document.getElementById('selectAllPartners').addEventListener('click',e=>{
+  e.preventDefault(); setChecks('.partner-check',true);
+});
+document.getElementById('clearPartners').addEventListener('click',e=>{
+  e.preventDefault(); setChecks('.partner-check',false);
+});
+document.getElementById('selectAllBrands').addEventListener('click',e=>{
+  e.preventDefault(); setChecks('.brand-check',true);
+});
+document.getElementById('clearBrands').addEventListener('click',e=>{
+  e.preventDefault(); setChecks('.brand-check',false);
+});
+
+async function addPermissions(pairs){
+  const status=document.getElementById('modalStatus');
+  status.textContent='جاري حفظ الصلاحيات...';
+  status.className='status-msg';
+
+  const rows=pairs.map(p=>({
+    user_id:modalUserId,
+    brand:p.brand,
+    partner_name:p.partner_name
+  }));
+
+  if(!rows.length){
+    status.textContent='اختار عنصر واحد على الأقل.';
+    status.className='status-msg err';
+    return;
+  }
+
+  const {error}=await supabaseClient
+    .from('user_permissions')
+    .upsert(rows,{onConflict:'user_id,brand,partner_name',ignoreDuplicates:true});
+
+  if(error){
+    console.error(error);
+    status.textContent='حصل خطأ: '+error.message;
+    status.className='status-msg err';
+    return;
+  }
+
+  status.textContent='تم حفظ الصلاحيات بنجاح.';
+  status.className='status-msg ok';
+
+  await renderCurrentPermissions();
+  await loadUsers();
+}
+
+document.getElementById('saveBrandPartnersBtn').addEventListener('click',async()=>{
+  const brand=document.getElementById('brandSelect').value;
+  const partners=[...document.querySelectorAll('.partner-check:checked')]
+    .map(x=>x.value);
+
+  await addPermissions(partners.map(partner_name=>({brand,partner_name})));
+});
+
+document.getElementById('savePartnerBrandsBtn').addEventListener('click',async()=>{
+  const partner_name=document.getElementById('partnerSelect').value;
+  const brands=[...document.querySelectorAll('.brand-check:checked')]
+    .map(x=>x.value);
+
+  await addPermissions(brands.map(brand=>({brand,partner_name})));
+});
+
+async function renderCurrentPermissions(){
+  const {data:perms,error}=await supabaseClient
+    .from('user_permissions')
+    .select('id,brand,partner_name')
+    .eq('user_id',modalUserId)
+    .order('brand');
+
+  const box=document.getElementById('modalPermissionChips');
+
+  if(error){
+    box.innerHTML='<span class="status-msg err">'+esc(error.message)+'</span>';
+    return;
+  }
+
+  if(!perms || !perms.length){
+    box.innerHTML='<span class="muted small">مفيش صلاحيات مضافة لسه.</span>';
+    return;
+  }
+
+  box.innerHTML=perms.map(p=>`
+    <span class="chip">
+      ${esc(p.brand)} + ${esc(p.partner_name)}
+      <button class="remove-perm-btn" data-id="${p.id}" title="حذف">×</button>
+    </span>`).join('');
+
+  document.querySelectorAll('.remove-perm-btn').forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const {error}=await supabaseClient
+        .from('user_permissions')
+        .delete()
+        .eq('id',btn.dataset.id);
+
+      if(error){ alert(error.message); return; }
+
+      await renderCurrentPermissions();
+      await loadUsers();
+    });
+  });
+}
 
 document.getElementById('createUserBtn').addEventListener('click',async()=>{
- const btn=document.getElementById('createUserBtn'),status=document.getElementById('createUserStatus');
- const username=document.getElementById('newUsername').value.trim().toLowerCase();
- const password=document.getElementById('newPassword').value,displayName=document.getElementById('newDisplayName').value.trim();
- status.textContent='';status.className='status-msg';
- if(!username||!password||password.length<6){status.textContent='محتاج اسم مستخدم وكلمة مرور 6 أحرف على الأقل.';status.className='status-msg err';return;}
- btn.disabled=true;btn.textContent='جاري الإنشاء...';
- const tempClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{storageKey:'mdp-temp-signup',persistSession:false,autoRefreshToken:false}});
- try{
-   const {data,error}=await tempClient.auth.signUp({email:username+USERNAME_DOMAIN,password});
-   if(error)throw error;
-   if(displayName&&data.user){
-     const {error:updateError}=await supabaseClient.from('profiles').update({display_name:displayName}).eq('id',data.user.id);
-     if(updateError)throw updateError;
-   }
-   status.textContent='تم إنشاء الحساب بنجاح. افتح إدارة الصلاحيات لإضافة Brand + Partner.';status.className='status-msg ok';
-   ['newUsername','newPassword','newDisplayName'].forEach(id=>document.getElementById(id).value='');await loadUsers();
- }catch(err){status.textContent='حصل خطأ: '+err.message;status.className='status-msg err';}
- finally{btn.disabled=false;btn.textContent='إنشاء الحساب';}
+  const username=document.getElementById('newUsername').value.trim().toLowerCase();
+  const password=document.getElementById('newPassword').value;
+  const display_name=document.getElementById('newDisplayName').value.trim();
+
+  const status=document.getElementById('createUserStatus');
+  const btn=document.getElementById('createUserBtn');
+
+  if(!username || !password || password.length<6){
+    status.textContent='أدخل اسم المستخدم وكلمة مرور 6 أحرف على الأقل.';
+    status.className='status-msg err';
+    return;
+  }
+
+  btn.disabled=true;
+  btn.textContent='جاري الإنشاء...';
+
+  try{
+    const tempClient=window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_ANON_KEY,
+      {auth:{storageKey:'mdp-temp-signup',persistSession:false,autoRefreshToken:false}}
+    );
+
+    const {data,error}=await tempClient.auth.signUp({
+      email:username+USERNAME_DOMAIN,
+      password
+    });
+
+    if(error) throw error;
+
+    if(display_name && data.user){
+      const {error:updateError}=await supabaseClient
+        .from('profiles')
+        .update({display_name})
+        .eq('id',data.user.id);
+
+      if(updateError) throw updateError;
+    }
+
+    status.textContent='تم إنشاء الحساب. الآن يمكنك إضافة صلاحياته.';
+    status.className='status-msg ok';
+
+    document.getElementById('newUsername').value='';
+    document.getElementById('newPassword').value='';
+    document.getElementById('newDisplayName').value='';
+
+    await loadUsers();
+
+  }catch(error){
+    console.error(error);
+    status.textContent='حصل خطأ: '+error.message;
+    status.className='status-msg err';
+  }finally{
+    btn.disabled=false;
+    btn.textContent='إنشاء الحساب';
+  }
 });
 
-document.getElementById('closeModalBtn').addEventListener('click',()=>document.getElementById('permModal').style.display='none');
-document.getElementById('logoutLink').addEventListener('click',async e=>{e.preventDefault();await supabaseClient.auth.signOut();location.href='index.html';});
+document.getElementById('closeModalBtn').addEventListener('click',()=>{
+  document.getElementById('permModal').style.display='none';
+});
+
+document.getElementById('logoutLink').addEventListener('click',async e=>{
+  e.preventDefault();
+  await supabaseClient.auth.signOut();
+  location.href='index.html';
+});
+
 init();
-</script></body></html>
+</script>
+</body>
+</html>
