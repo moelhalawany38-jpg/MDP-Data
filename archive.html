@@ -95,15 +95,15 @@ function monthSort(a,b){
   return a.localeCompare(b);
 }
 async function fetchAll(table, select, filters=[]){
-  let out=[], from=0, page=1000;
+  let out=[], from=0;
   while(true){
-    let q=sb.from(table).select(select).order('id',{ascending:true}).range(from,from+page-1);
+    let q=sb.from(table).select(select).order('id',{ascending:true}).range(from, from+999);
     for(const f of filters) q=f(q);
     const {data,error}=await q;
     if(error) throw error;
-    out.push(...(data||[]));
-    if(!data || data.length<page) break;
-    from+=page;
+    if(!data || data.length===0) break;
+    out.push(...data);
+    from+=data.length; // نتقدم بعدد الصفوف اللي رجعت فعليًا، مش بعدد ثابت مفترض
   }
   return out;
 }

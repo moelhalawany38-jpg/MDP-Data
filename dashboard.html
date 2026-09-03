@@ -1,18 +1,18 @@
 <!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>بياناتي</title><link rel="stylesheet" href="style.css"><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="config.js"></script></head><body><div class="app-shell"><aside class="sidebar"><div class="auth-mark">MDP Data</div><nav><a class="active" href="dashboard.html">بياناتي</a><a href="archive.html">Achievement</a><a href="profile.html">تغيير كلمة المرور</a></nav><div class="who" id="whoBox"></div><a href="#" id="logout">تسجيل الخروج</a></aside><main class="main"><h1>بياناتي</h1><p class="subtitle" id="info">جاري التحميل...</p><button class="btn" id="downloadBtn">تنزيل Excel</button><div class="panel"><div class="panel-header">الداتا <span class="badge" id="count">0 صف</span></div><div class="table-wrap" id="tableWrap"></div></div></main></div><script>
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);let rows=[],cols=[];const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-// Supabase بترجع 1000 صف بالظبط كحد أقصى في كل طلب واحد.
-// عشان نجيب كل الصفوف مهما كان عددهم، بنطلب على دفعات (صفحات) لحد ما تخلص.
+// عشان نجيب كل الصفوف مهما كان عددهم، بنطلب على دفعات (صفحات) لحد ما ترجع صفحة فاضية تمامًا —
+// مش لحد ما ترجع صفحة أقل من 1000 (لأن الحد الأقصى الفعلي لكل طلب ممكن يكون مختلف).
 async function fetchAllRows(B,P){
-  let all=[], from=0; const PAGE=1000;
+  let all=[], from=0;
   while(true){
     let {data,error}=await sb.from('data_rows').select('row_data,brand,partner')
       .in('brand',B).in('partner',P).order('id',{ascending:true})
-      .range(from, from+PAGE-1);
+      .range(from, from+999);
     if(error) throw error;
-    all=all.concat(data||[]);
-    if(!data || data.length<PAGE) break;
-    from+=PAGE;
+    if(!data || data.length===0) break;
+    all=all.concat(data);
+    from+=data.length;
   }
   return all;
 }
