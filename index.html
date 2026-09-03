@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>تسجيل الدخول — MDP Data</title>
 <link rel="stylesheet" href="style.css">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script type="text/javascript" src="https://gc.kes.v2.scr.kaspersky-labs.com/7EA5E9BB-55E1-4C31-9C21-4943DDFED2E4/main.js?attr=j1xVX3t8XyRbqI5QpJX5qDB8CCozG2UqyECB_q5G_9oQ5kjFsWF_AL5lcMm0N22aCtDWKI4heOkv7o0xRouWLBj052LEYGfpx6n3kiSnaG47rosPWgMSUYf2Na_5bXZHse-DxFa8eo_D1u-bsUU7ZUbiUTYoGaG3uf9-_dJ-4QQxAWNVAuDouDhK6O7ZatkgOpAXv16bbPIL76xJR5NYeC5AT9l9EeYe6xZ4j31kEPGJ6u2KgUqMz5CQ4-vK1CbytdGAbnN7gQ37qgFaDtSxbKjshZj8-22hPl4Plia49e4YvWYj7H57xSmXgatBaRnh" charset="UTF-8"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js"></script>
 </head>
 <body>
@@ -32,7 +32,7 @@
 </div>
 
 <script>
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 function showError(msg){
   const el = document.getElementById('errMsg');
@@ -41,9 +41,9 @@ function showError(msg){
 }
 
 async function routeIfLoggedIn(){
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await supabaseClient.auth.getSession();
   if(!session) return;
-  const { data: profile } = await supabase
+  const { data: profile } = await supabaseClient
     .from('profiles')
     .select('is_admin')
     .eq('id', session.user.id)
@@ -62,7 +62,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   const password = document.getElementById('password').value;
   const email = username.includes('@') ? username : username + USERNAME_DOMAIN;
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
 
   if(error){
     showError('اسم المستخدم أو كلمة المرور غلط.');
@@ -70,7 +70,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     return;
   }
 
-  const { data: profile } = await supabase
+  const { data: profile } = await supabaseClient
     .from('profiles')
     .select('is_admin')
     .eq('id', data.user.id)

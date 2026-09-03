@@ -56,25 +56,25 @@
 </div>
 
 <script>
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function init(){
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await supabaseClient.auth.getSession();
   if(!session){ window.location.href = 'index.html'; return; }
-  const { data: profile } = await supabase.from('profiles').select('is_admin, email, display_name').eq('id', session.user.id).single();
+  const { data: profile } = await supabaseClient.from('profiles').select('is_admin, email, display_name').eq('id', session.user.id).single();
   if(!profile || !profile.is_admin){ window.location.href = 'dashboard.html'; return; }
   document.getElementById('whoBox').textContent = (profile.display_name || profile.email) + ' (أدمن)';
   loadLists();
 }
 document.getElementById('logoutLink').addEventListener('click', async (e) => {
   e.preventDefault();
-  await supabase.auth.signOut();
+  await supabaseClient.auth.signOut();
   window.location.href = 'index.html';
 });
 
 async function loadLists(){
-  const { data: brands } = await supabase.from('brands').select('id, name').order('name');
-  const { data: partners } = await supabase.from('partners').select('id, name').order('name');
+  const { data: brands } = await supabaseClient.from('brands').select('id, name').order('name');
+  const { data: partners } = await supabaseClient.from('partners').select('id, name').order('name');
 
   document.getElementById('brandsCount').textContent = (brands || []).length;
   document.getElementById('partnersCount').textContent = (partners || []).length;
@@ -89,12 +89,12 @@ async function loadLists(){
 
   document.querySelectorAll('.del-brand').forEach(b => b.addEventListener('click', async () => {
     if(!confirm('تأكيد حذف البراند ده؟ أي صلاحيات مربوطة بيه هتتشال.')) return;
-    await supabase.from('brands').delete().eq('id', b.dataset.id);
+    await supabaseClient.from('brands').delete().eq('id', b.dataset.id);
     loadLists();
   }));
   document.querySelectorAll('.del-partner').forEach(b => b.addEventListener('click', async () => {
     if(!confirm('تأكيد حذف البارتنر ده؟ أي صلاحيات مربوطة بيه هتتشال.')) return;
-    await supabase.from('partners').delete().eq('id', b.dataset.id);
+    await supabaseClient.from('partners').delete().eq('id', b.dataset.id);
     loadLists();
   }));
 }
@@ -103,14 +103,14 @@ document.getElementById('addBrandBtn').addEventListener('click', async () => {
   const input = document.getElementById('newBrandInput');
   const name = input.value.trim();
   if(!name) return;
-  const { error } = await supabase.from('brands').insert({ name });
+  const { error } = await supabaseClient.from('brands').insert({ name });
   if(!error){ input.value = ''; loadLists(); } else alert(error.message);
 });
 document.getElementById('addPartnerBtn').addEventListener('click', async () => {
   const input = document.getElementById('newPartnerInput');
   const name = input.value.trim();
   if(!name) return;
-  const { error } = await supabase.from('partners').insert({ name });
+  const { error } = await supabaseClient.from('partners').insert({ name });
   if(!error){ input.value = ''; loadLists(); } else alert(error.message);
 });
 

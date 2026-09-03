@@ -40,13 +40,13 @@
 </div>
 
 <script>
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 async function init(){
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await supabaseClient.auth.getSession();
   if(!session){ window.location.href = 'index.html'; return; }
 
-  const { data: profile } = await supabase.from('profiles').select('is_admin, email, display_name').eq('id', session.user.id).single();
+  const { data: profile } = await supabaseClient.from('profiles').select('is_admin, email, display_name').eq('id', session.user.id).single();
   const isAdmin = profile && profile.is_admin;
 
   document.getElementById('whoBox').textContent = (profile && (profile.display_name || profile.email)) || session.user.email;
@@ -64,7 +64,7 @@ async function init(){
 
 document.getElementById('logoutLink').addEventListener('click', async (e) => {
   e.preventDefault();
-  await supabase.auth.signOut();
+  await supabaseClient.auth.signOut();
   window.location.href = 'index.html';
 });
 
@@ -89,7 +89,7 @@ document.getElementById('changeBtn').addEventListener('click', async () => {
 
   btn.disabled = true; btn.textContent = 'جاري الحفظ...';
 
-  const { error } = await supabase.auth.updateUser({ password: p1 });
+  const { error } = await supabaseClient.auth.updateUser({ password: p1 });
 
   if(error){
     status.textContent = 'حصل خطأ: ' + error.message;

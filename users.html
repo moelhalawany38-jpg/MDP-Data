@@ -82,15 +82,15 @@
 </div>
 
 <script>
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let allBrands = [];
 let allPartners = [];
 let modalUserId = null;
 
 async function init(){
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await supabaseClient.auth.getSession();
   if(!session){ window.location.href = 'index.html'; return; }
-  const { data: profile } = await supabase.from('profiles').select('is_admin, email, display_name').eq('id', session.user.id).single();
+  const { data: profile } = await supabaseClient.from('profiles').select('is_admin, email, display_name').eq('id', session.user.id).single();
   if(!profile || !profile.is_admin){ window.location.href = 'dashboard.html'; return; }
   document.getElementById('whoBox').textContent = (profile.display_name || profile.email) + ' (أدمن)';
   loadBrandPartnerOptions();
@@ -98,13 +98,13 @@ async function init(){
 }
 document.getElementById('logoutLink').addEventListener('click', async (e) => {
   e.preventDefault();
-  await supabase.auth.signOut();
+  await supabaseClient.auth.signOut();
   window.location.href = 'index.html';
 });
 
 async function loadBrandPartnerOptions(){
-  const { data: brands } = await supabase.from('brands').select('name').order('name');
-  const { data: partners } = await supabase.from('partners').select('name').order('name');
+  const { data: brands } = await supabaseClient.from('brands').select('name').order('name');
+  const { data: partners } = await supabaseClient.from('partners').select('name').order('name');
   allBrands = brands || [];
   allPartners = partners || [];
 
@@ -121,8 +121,8 @@ async function loadBrandPartnerOptions(){
 }
 
 async function loadUsers(){
-  const { data: profiles } = await supabase.from('profiles').select('id, email, display_name, is_admin').order('created_at', { ascending: false });
-  const { data: perms } = await supabase.from('permissions').select('user_id, perm_type, value');
+  const { data: profiles } = await supabaseClient.from('profiles').select('id, email, display_name, is_admin').order('created_at', { ascending: false });
+  const { data: perms } = await supabaseClient.from('permissions').select('user_id, perm_type, value');
 
   const permMap = {};
   (perms || []).forEach(p => {
@@ -185,7 +185,7 @@ document.getElementById('createUserBtn').addEventListener('click', async () => {
     if(error) throw error;
 
     if(displayName && data.user){
-      await supabase.from('profiles').update({ display_name: displayName }).eq('id', data.user.id);
+      await supabaseClient.from('profiles').update({ display_name: displayName }).eq('id', data.user.id);
     }
 
     status.textContent = 'تم إنشاء الحساب بنجاح.';
@@ -210,7 +210,7 @@ async function openPermModal(userId, label){
 }
 
 async function renderModalChips(){
-  const { data: perms } = await supabase.from('permissions').select('id, perm_type, value').eq('user_id', modalUserId);
+  const { data: perms } = await supabaseClient.from('permissions').select('id, perm_type, value').eq('user_id', modalUserId);
   const brandChips = (perms || []).filter(p => p.perm_type === 'brand');
   const partnerChips = (perms || []).filter(p => p.perm_type === 'partner');
 
@@ -226,7 +226,7 @@ async function renderModalChips(){
 
   document.querySelectorAll('.remove-perm-btn').forEach(b => {
     b.addEventListener('click', async () => {
-      await supabase.from('permissions').delete().eq('id', b.dataset.id);
+      await supabaseClient.from('permissions').delete().eq('id', b.dataset.id);
       renderModalChips();
       loadUsers();
     });
@@ -237,14 +237,14 @@ document.getElementById('modalAddBrandBtn').addEventListener('click', async () =
   const select = document.getElementById('modalBrandSelect');
   const value = select.value;
   if(!value) return;
-  const { error } = await supabase.from('permissions').insert({ user_id: modalUserId, perm_type: 'brand', value });
+  const { error } = await supabaseClient.from('permissions').insert({ user_id: modalUserId, perm_type: 'brand', value });
   if(!error){ select.value = ''; renderModalChips(); loadUsers(); }
 });
 document.getElementById('modalAddPartnerBtn').addEventListener('click', async () => {
   const select = document.getElementById('modalPartnerSelect');
   const value = select.value;
   if(!value) return;
-  const { error } = await supabase.from('permissions').insert({ user_id: modalUserId, perm_type: 'partner', value });
+  const { error } = await supabaseClient.from('permissions').insert({ user_id: modalUserId, perm_type: 'partner', value });
   if(!error){ select.value = ''; renderModalChips(); loadUsers(); }
 });
 
