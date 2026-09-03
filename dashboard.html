@@ -45,87 +45,206 @@
 
 <script>
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 let allRows = [];
 let allColumns = [];
 
-async function init(){
+async function init() {
   const { data: { session } } = await supabaseClient.auth.getSession();
-  if(!session){ window.location.href = 'index.html'; return; }
 
-  const { data: profile } = await supabase
-    .from('profiles').select('is_admin, email, display_name').eq('id', session.user.id).single();
-
-  if(profile && profile.is_admin){ window.location.href = 'admin.html'; return; }
-
-  document.getElementById('whoBox').textContent = (profile && (profile.display_name || profile.email)) || session.user.email;
-
-  const { data: perms } = await supabase
-    .from('permissions').select('perm_type, value').eq('user_id', session.user.id);
-
-  const brands = (perms || []).filter(p => p.perm_type === 'brand').map(p => p.value === '*' ? 'كل البراندات' : p.value);
-  const partners = (perms || []).filter(p => p.perm_type === 'partner').map(p => p.value === '*' ? 'كل البارتنرز' : p.value);
-
-  const parts = [];
-  if(brands.length) parts.push('البراندات: ' + brands.join('، '));
-  if(partners.length) parts.push('البارتنرز: ' + partners.join('، '));
-  document.getElementById('subtitlePerms').textContent = parts.length
-    ? parts.join(' — ')
-    : 'مفيش صلاحيات متاحة لحسابك حاليًا — كلم الأدمن.';
-
-  const { data: colsRow } = await supabaseClient.from('data_columns').select('columns').eq('id', 1).single();
-  allColumns = (colsRow && colsRow.columns) || [];
-
-  const { data: rows, error } = await supabase
-    .from('data_rows').select('row_data').order('id', { ascending: true });
-
-  if(error){
-    document.getElementById('tableWrap').innerHTML = '<div class="empty-state">حصل خطأ في تحميل البيانات.</div>';
+  if (!session) {
+    window.location.href = 'index.html';
     return;
   }
 
+  // بيانات المستخدم
+  const { data: profile } = await supabaseClient
+    .from('profiles')
+    .select('is_admin, email, display_name')
+    .eq('id', session.user.id)
+    .single();
+
+  if (profile && profile.is_admin) {
+    window.location.href = 'admin.html';
+    return;
+  }
+
+  document.getElementById('whoBox').textContent =
+    (profile && (profile.display_name || profile.email)) || session.user.email;
+
+  // صلاحيات المستخدم
+  const { data: perms } = await supabaseClient
+    .from('permissions')
+    .select('perm_type, value')
+    .eq('user_id', session.user.id);
+
+  const brands = (perms || [])
+    .filter(p => p.perm_type === 'brand')
+    .map(p => p.value === '*' ? 'كل البراندات' : p.value);
+
+  const partners = (perms || [])
+    .filter(p => p.perm_type === 'partner')
+    .map(p => p.value === '*' ? 'كل البارتنرز' : p.value);
+
+  const parts = [];
+
+  if (brands.length) {
+    parts.push('البراندات: ' + brands.join('، '));
+  }
+
+  if (partners.length) {
+    parts.push('البارتنرز: ' + partners.join('، '));
+  }
+
+  document.getElementById('subtitlePerms').textContent =
+    parts.length
+      ? parts.join(' — ')
+      : 'مفيش صلاحيات متاحة لحسابك حاليًا — كلم الأدمن.';
+
+
+  // الأعمدة
+  const { data: colsRow } = await supabaseClient
+    .from('data_columns')
+    .select('columns')
+    .eq('id', 1)
+    .single();
+
+  allColumns = (colsRow && colsRow.columns) || [];
+
+
+  // البيانات
+  const { data: rows, error } = await supabaseClient
+    .from('data_rows')
+    .select('row_data')
+    .order('id', { ascending: true });
+
+
+  if (error) {
+    console.error(error);
+
+    document.getElementById('tableWrap').innerHTML =
+      '<div class="empty-state">حصل خطأ في تحميل البيانات: ' +
+      error.message +
+      '</div>';
+
+    return;
+  }
+
+
   allRows = (rows || []).map(r => r.row_data);
-  if(!allColumns.length && allRows.length) allColumns = Object.keys(allRows[0]);
+
+  if (!allColumns.length && allRows.length) {
+    allColumns = Object.keys(allRows[0]);
+  }
 
   renderTable(allRows);
 }
 
-function renderTable(rows){
-  document.getElementById('countBadge').textContent = rows.length + ' صف';
+
+function renderTable(rows) {
+
+  document.getElementById('countBadge').textContent =
+    rows.length + ' صف';
+
   const wrap = document.getElementById('tableWrap');
-  if(!rows.length){
-    wrap.innerHTML = '<div class="empty-state">لا توجد بيانات متاحة لحسابك حاليًا.</div>';
+
+  if (!rows.length) {
+    wrap.innerHTML =
+      '<div class="empty-state">لا توجد بيانات متاحة لحسابك حاليًا.</div>';
+
     return;
   }
+
+
   let html = '<table><thead><tr>';
-  allColumns.forEach(c => html += `<th>${escapeHtml(c)}</th>`);
-  html += '</tr></thead><tbody>';
-  rows.forEach(r => {
-    html += '<tr>';
-    allColumns.forEach(c => html += `<td>${escapeHtml(r[c] ?? '')}</td>`);
-    html += '</tr>';
+
+  allColumns.forEach(c => {
+    html += `<th>${escapeHtml(c)}</th>`;
   });
+
+  html += '</tr></thead><tbody>';
+
+
+  rows.forEach(r => {
+
+    html += '<tr>';
+
+    allColumns.forEach(c => {
+      html += `<td>${escapeHtml(r[c] ?? '')}</td>`;
+    });
+
+    html += '</tr>';
+
+  });
+
+
   html += '</tbody></table>';
+
   wrap.innerHTML = html;
 }
 
-function escapeHtml(v){
-  return String(v).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+function escapeHtml(v) {
+
+  return String(v).replace(
+    /[&<>"']/g,
+
+    m => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[m])
+
+  );
+
 }
 
+
 document.getElementById('downloadBtn').addEventListener('click', () => {
-  if(!allRows.length) return;
-  const ws = XLSX.utils.json_to_sheet(allRows, { header: allColumns });
+
+  if (!allRows.length) return;
+
+  const ws = XLSX.utils.json_to_sheet(allRows, {
+    header: allColumns
+  });
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'الداتا');
-  const today = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, `mdp-data-${today}.xlsx`);
+
+  XLSX.utils.book_append_sheet(
+    wb,
+    ws,
+    'الداتا'
+  );
+
+  const today = new Date()
+    .toISOString()
+    .slice(0, 10);
+
+  XLSX.writeFile(
+    wb,
+    `mdp-data-${today}.xlsx`
+  );
+
 });
 
-document.getElementById('logoutLink').addEventListener('click', async (e) => {
-  e.preventDefault();
-  await supabaseClient.auth.signOut();
-  window.location.href = 'index.html';
-});
+
+document.getElementById('logoutLink').addEventListener(
+  'click',
+
+  async (e) => {
+
+    e.preventDefault();
+
+    await supabaseClient.auth.signOut();
+
+    window.location.href = 'index.html';
+
+  }
+
+);
+
 
 init();
 </script>
