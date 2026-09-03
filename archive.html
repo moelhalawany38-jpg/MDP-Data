@@ -94,17 +94,43 @@ function monthSort(a,b){
   if(ai>=0) return -1;if(bi>=0)return 1;
   return a.localeCompare(b);
 }
-async function fetchAll(table, select, filters=[]){
-  let out=[], from=0;
-  while(true){
-    let q=sb.from(table).select(select).order('id',{ascending:true}).range(from, from+999);
-    for(const f of filters) q=f(q);
-    const {data,error}=await q;
-    if(error) throw error;
-    if(!data || data.length===0) break;
+async function fetchAll(table, select, filters = []) {
+  let out = [];
+  let from = 0;
+  const pageSize = 1000;
+
+  while (true) {
+    let q = sb
+      .from(table)
+      .select(select)
+      .order('id', { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    for (const f of filters) {
+      q = f(q);
+    }
+
+    const { data, error } = await q;
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
+      break;
+    }
+
     out.push(...data);
-    from+=data.length; // نتقدم بعدد الصفوف اللي رجعت فعليًا، مش بعدد ثابت مفترض
+
+    // لو رجعت أقل من 1000، يبقى دي آخر صفحة
+    if (data.length < pageSize) {
+      break;
+    }
+
+    // الانتقال للصفحة التالية بشكل ثابت
+    from += pageSize;
   }
+
   return out;
 }
 async function init(){
