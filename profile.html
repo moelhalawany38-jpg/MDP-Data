@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تغيير كلمة المرور — MDP Data</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div>
+    <nav id="navBox"></nav>
+    <div class="who" id="whoBox"></div>
+    <a href="#" id="logoutLink" class="small">تسجيل الخروج</a>
+  </aside>
+
+  <main class="main">
+    <h1>تغيير كلمة المرور</h1>
+    <p class="subtitle">غيّر كلمة المرور الخاصة بحسابك.</p>
+
+    <div class="panel" style="max-width:420px;">
+      <div style="padding:20px;">
+        <div class="field">
+          <label>كلمة المرور الجديدة</label>
+          <input type="password" id="newPassword" placeholder="6 أحرف على الأقل">
+        </div>
+        <div class="field">
+          <label>تأكيد كلمة المرور الجديدة</label>
+          <input type="password" id="confirmPassword">
+        </div>
+        <button class="btn" id="changeBtn" style="width:auto;">حفظ كلمة المرور الجديدة</button>
+        <div class="status-msg" id="changeStatus"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+async function init(){
+  const { data: { session } } = await supabase.auth.getSession();
+  if(!session){ window.location.href = 'index.html'; return; }
+
+  const { data: profile } = await supabase.from('profiles').select('is_admin, email, display_name').eq('id', session.user.id).single();
+  const isAdmin = profile && profile.is_admin;
+
+  document.getElementById('whoBox').textContent = (profile && (profile.display_name || profile.email)) || session.user.email;
+
+  document.getElementById('navBox').innerHTML = isAdmin ? `
+    <a href="admin.html">رفع الداتا</a>
+    <a href="brands.html">البراندات والبارتنرز</a>
+    <a href="users.html">المستخدمين والصلاحيات</a>
+    <a href="profile.html" class="active">تغيير كلمة المرور</a>
+  ` : `
+    <a href="dashboard.html">بياناتي</a>
+    <a href="profile.html" class="active">تغيير كلمة المرور</a>
+  `;
+}
+
+document.getElementById('logoutLink').addEventListener('click', async (e) => {
+  e.preventDefault();
+  await supabase.auth.signOut();
+  window.location.href = 'index.html';
+});
+
+document.getElementById('changeBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('changeBtn');
+  const status = document.getElementById('changeStatus');
+  const p1 = document.getElementById('newPassword').value;
+  const p2 = document.getElementById('confirmPassword').value;
+
+  status.textContent = ''; status.className = 'status-msg';
+
+  if(!p1 || p1.length < 6){
+    status.textContent = 'كلمة المرور لازم تكون 6 أحرف على الأقل.';
+    status.classList.add('err');
+    return;
+  }
+  if(p1 !== p2){
+    status.textContent = 'كلمتا المرور مش متطابقتين.';
+    status.classList.add('err');
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'جاري الحفظ...';
+
+  const { error } = await supabase.auth.updateUser({ password: p1 });
+
+  if(error){
+    status.textContent = 'حصل خطأ: ' + error.message;
+    status.classList.add('err');
+  }else{
+    status.textContent = 'تم تغيير كلمة المرور بنجاح.';
+    status.classList.add('ok');
+    document.getElementById('newPassword').value = '';
+    document.getElementById('confirmPassword').value = '';
+  }
+  btn.disabled = false; btn.textContent = 'حفظ كلمة المرور الجديدة';
+});
+
+init();
+</script>
+
+</body>
+</html>

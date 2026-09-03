@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>رفع الداتا — MDP Data</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div>
+    <nav>
+      <a href="admin.html" class="active">رفع الداتا</a>
+      <a href="brands.html">البراندات والبارتنرز</a>
+      <a href="users.html">المستخدمين والصلاحيات</a>
+      <a href="profile.html">تغيير كلمة المرور</a>
+    </nav>
+    <div class="who" id="whoBox"></div>
+    <a href="#" id="logoutLink" class="small">تسجيل الخروج</a>
+  </aside>
+
+  <main class="main">
+    <h1>رفع الداتا اليومية</h1>
+    <p class="subtitle">
+      رفع ملف جديد هيمسح كل الداتا القديمة ويستبدلها بالجديدة.
+      الملف المفروض يكون فيه 31 عمود — <b>عمود البارتنر هو التاني</b> و<b>عمود البراند هو الرابع</b>، بترتيبهم في الشيت.
+    </p>
+
+    <div class="upload-drop">
+      اختار ملف Excel (.xlsx) أو CSV<br>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv">
+    </div>
+
+    <div id="previewBox" style="display:none;">
+      <div class="panel" style="margin-bottom:14px;">
+        <div class="panel-header">
+          <span>معاينة قبل الرفع</span>
+          <span class="badge" id="previewCount">0 صف</span>
+        </div>
+        <p class="muted small" style="padding:10px 20px 0;">
+          عمود البارتنر المكتشف: <b id="detectedPartnerCol"></b> — عمود البراند المكتشف: <b id="detectedBrandCol"></b>
+        </p>
+        <div class="table-wrap" id="previewTable"></div>
+      </div>
+      <button class="btn" id="confirmUploadBtn" style="max-width:260px;">تأكيد الرفع واستبدال الداتا</button>
+      <div class="status-msg" id="uploadStatus"></div>
+    </div>
+
+    <div class="panel" style="margin-top:24px;">
+      <div class="panel-header">
+        <span>آخر رفعة</span>
+        <span class="badge" id="currentCount">— </span>
+      </div>
+      <div style="padding:14px 20px;" class="muted small" id="lastUploadInfo">جاري التحميل...</div>
+    </div>
+  </main>
+</div>
+
+<script>
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const PARTNER_COL_INDEX = 1; // العمود التاني (0-indexed)
+const BRAND_COL_INDEX = 3;   // العمود الرابع (0-indexed)
+
+let uploadRows = [];
+let uploadCols = [];
+
+async function init(){
+  const { data: { session } } = await supabase.auth.getSession();
+  if(!session){ window.location.href = 'index.html'; return; }
+  const { data: profile } = await supabase.from('profiles').select('is_admin, email, display_name').eq('id', session.user.id).single();
+  if(!profile || !profile.is_admin){ window.location.href = 'dashboard.html'; return; }
+  document.getElementById('whoBox').textContent = (profile.display_name || profile.email) + ' (أدمن)';
+  loadLastUpload();
+}
+document.getElementById('logoutLink').addEventListener('click', async (e) => {
+  e.preventDefault();
+  await supabase.auth.signOut();
+  window.location.href = 'index.html';
+});
+
+document.getElementById('fileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array' });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const json = XLSX.utils.sheet_to_json(sheet, { defval: '', header: 1 });
+
+  if(json.length < 2){ alert('الملف فاضي أو مفيهوش صفوف بيانات.'); return; }
+
+  const headerRow = json[0];
+  const dataRows = json.slice(1);
+
+  if(headerRow.length < 4){ alert('الملف لازم يحتوي على 4 أعمدة على الأقل (البارتنر والبراند فيهم).'); return; }
+
+  uploadCols = headerRow;
+  uploadRows = dataRows.map(rowArr => {
+    const obj = {};
+    headerRow.forEach((h, i) => obj[h || `عمود ${i+1}`] = rowArr[i] ?? '');
+    return {
+      __brand: String(rowArr[BRAND_COL_INDEX] ?? '').trim(),
+      __partner: String(rowArr[PARTNER_COL_INDEX] ?? '').trim(),
+      data: obj
+    };
+  }).filter(r => r.__brand || r.__partner);
+
+  document.getElementById('detectedPartnerCol').textContent = headerRow[PARTNER_COL_INDEX] || `عمود ${PARTNER_COL_INDEX+1}`;
+  document.getElementById('detectedBrandCol').textContent = headerRow[BRAND_COL_INDEX] || `عمود ${BRAND_COL_INDEX+1}`;
+
+  document.getElementById('previewBox').style.display = 'block';
+  document.getElementById('previewCount').textContent = uploadRows.length + ' صف';
+  renderPreview(uploadRows.slice(0, 15), uploadCols);
+});
+
+function renderPreview(rows, cols){
+  let html = '<table><thead><tr>';
+  cols.forEach(c => html += `<th>${escapeHtml(c)}</th>`);
+  html += '</tr></thead><tbody>';
+  rows.forEach(r => {
+    html += '<tr>';
+    cols.forEach(c => html += `<td>${escapeHtml(r.data[c])}</td>`);
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('previewTable').innerHTML = html;
+}
+
+function escapeHtml(v){
+  return String(v).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+document.getElementById('confirmUploadBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('confirmUploadBtn');
+  const status = document.getElementById('uploadStatus');
+  btn.disabled = true; btn.textContent = 'جاري الرفع...';
+  status.textContent = ''; status.className = 'status-msg';
+
+  try{
+    const { error: delErr } = await supabase.from('data_rows').delete().gt('id', 0);
+    if(delErr) throw delErr;
+
+    const payload = uploadRows.map(r => ({ brand: r.__brand, partner: r.__partner, row_data: r.data }));
+    const chunkSize = 400;
+    for(let i = 0; i < payload.length; i += chunkSize){
+      const { error: insErr } = await supabase.from('data_rows').insert(payload.slice(i, i + chunkSize));
+      if(insErr) throw insErr;
+    }
+
+    const { error: colErr } = await supabase.from('data_columns').upsert({
+      id: 1, columns: uploadCols,
+      brand_col_index: BRAND_COL_INDEX + 1,
+      partner_col_index: PARTNER_COL_INDEX + 1,
+      updated_at: new Date().toISOString()
+    });
+    if(colErr) throw colErr;
+
+    status.textContent = `تم رفع ${uploadRows.length} صف بنجاح.`;
+    status.classList.add('ok');
+    document.getElementById('previewBox').style.display = 'none';
+    document.getElementById('fileInput').value = '';
+    loadLastUpload();
+  }catch(err){
+    status.textContent = 'حصل خطأ أثناء الرفع: ' + err.message;
+    status.classList.add('err');
+  }finally{
+    btn.disabled = false; btn.textContent = 'تأكيد الرفع واستبدال الداتا';
+  }
+});
+
+async function loadLastUpload(){
+  const { count } = await supabase.from('data_rows').select('id', { count: 'exact', head: true });
+  const { data: colsRow } = await supabase.from('data_columns').select('updated_at').eq('id', 1).single();
+  document.getElementById('currentCount').textContent = (count ?? 0) + ' صف';
+  document.getElementById('lastUploadInfo').textContent = colsRow && colsRow.updated_at
+    ? 'آخر تحديث: ' + new Date(colsRow.updated_at).toLocaleString('ar-EG')
+    : 'لسه معملتش أي رفعة.';
+}
+
+init();
+</script>
+
+</body>
+</html>

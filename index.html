@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>تسجيل الدخول — MDP Data</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+</head>
+<body>
+
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div>
+    <h1>سجّل دخولك لعرض بياناتك</h1>
+
+    <div class="error-msg" id="errMsg"></div>
+
+    <form id="loginForm">
+      <div class="field">
+        <label>اسم المستخدم</label>
+        <input type="text" id="username" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label>كلمة المرور</label>
+        <input type="password" id="password" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn" id="loginBtn">دخول</button>
+    </form>
+  </div>
+</div>
+
+<script>
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+function showError(msg){
+  const el = document.getElementById('errMsg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+async function routeIfLoggedIn(){
+  const { data: { session } } = await supabase.auth.getSession();
+  if(!session) return;
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', session.user.id)
+    .single();
+  window.location.href = (profile && profile.is_admin) ? 'admin.html' : 'dashboard.html';
+}
+routeIfLoggedIn();
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = 'بيتم الدخول...';
+  document.getElementById('errMsg').style.display = 'none';
+
+  const username = document.getElementById('username').value.trim().toLowerCase();
+  const password = document.getElementById('password').value;
+  const email = username.includes('@') ? username : username + USERNAME_DOMAIN;
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if(error){
+    showError('اسم المستخدم أو كلمة المرور غلط.');
+    btn.disabled = false; btn.textContent = 'دخول';
+    return;
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', data.user.id)
+    .single();
+
+  window.location.href = (profile && profile.is_admin) ? 'admin.html' : 'dashboard.html';
+});
+</script>
+
+</body>
+</html>

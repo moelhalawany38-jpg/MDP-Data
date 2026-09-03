@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>البراندات والبارتنرز — MDP Data</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div>
+    <nav>
+      <a href="admin.html">رفع الداتا</a>
+      <a href="brands.html" class="active">البراندات والبارتنرز</a>
+      <a href="users.html">المستخدمين والصلاحيات</a>
+      <a href="profile.html">تغيير كلمة المرور</a>
+    </nav>
+    <div class="who" id="whoBox"></div>
+    <a href="#" id="logoutLink" class="small">تسجيل الخروج</a>
+  </aside>
+
+  <main class="main">
+    <h1>البراندات والبارتنرز</h1>
+    <p class="subtitle">القوائم دي هي اللي هتظهر لك لما تدي صلاحية لمستخدم من صفحة المستخدمين.</p>
+
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-header">
+          <span>البراندات</span>
+          <span class="badge" id="brandsCount">0</span>
+        </div>
+        <div style="padding:14px 20px;" class="inline-form">
+          <input type="text" id="newBrandInput" placeholder="اسم براند جديد">
+          <button class="btn btn-sm" id="addBrandBtn" style="width:auto;">إضافة</button>
+        </div>
+        <div id="brandsList"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>البارتنرز</span>
+          <span class="badge" id="partnersCount">0</span>
+        </div>
+        <div style="padding:14px 20px;" class="inline-form">
+          <input type="text" id="newPartnerInput" placeholder="اسم بارتنر جديد">
+          <button class="btn btn-sm" id="addPartnerBtn" style="width:auto;">إضافة</button>
+        </div>
+        <div id="partnersList"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+async function init(){
+  const { data: { session } } = await supabase.auth.getSession();
+  if(!session){ window.location.href = 'index.html'; return; }
+  const { data: profile } = await supabase.from('profiles').select('is_admin, email, display_name').eq('id', session.user.id).single();
+  if(!profile || !profile.is_admin){ window.location.href = 'dashboard.html'; return; }
+  document.getElementById('whoBox').textContent = (profile.display_name || profile.email) + ' (أدمن)';
+  loadLists();
+}
+document.getElementById('logoutLink').addEventListener('click', async (e) => {
+  e.preventDefault();
+  await supabase.auth.signOut();
+  window.location.href = 'index.html';
+});
+
+async function loadLists(){
+  const { data: brands } = await supabase.from('brands').select('id, name').order('name');
+  const { data: partners } = await supabase.from('partners').select('id, name').order('name');
+
+  document.getElementById('brandsCount').textContent = (brands || []).length;
+  document.getElementById('partnersCount').textContent = (partners || []).length;
+
+  document.getElementById('brandsList').innerHTML = (brands && brands.length)
+    ? brands.map(b => `<div class="list-row"><span>${b.name}</span><button class="btn-outline btn btn-sm del-brand" data-id="${b.id}">حذف</button></div>`).join('')
+    : '<div class="empty-state">لسه مفيش براندات مضافة.</div>';
+
+  document.getElementById('partnersList').innerHTML = (partners && partners.length)
+    ? partners.map(p => `<div class="list-row"><span>${p.name}</span><button class="btn-outline btn btn-sm del-partner" data-id="${p.id}">حذف</button></div>`).join('')
+    : '<div class="empty-state">لسه مفيش بارتنرز مضافين.</div>';
+
+  document.querySelectorAll('.del-brand').forEach(b => b.addEventListener('click', async () => {
+    if(!confirm('تأكيد حذف البراند ده؟ أي صلاحيات مربوطة بيه هتتشال.')) return;
+    await supabase.from('brands').delete().eq('id', b.dataset.id);
+    loadLists();
+  }));
+  document.querySelectorAll('.del-partner').forEach(b => b.addEventListener('click', async () => {
+    if(!confirm('تأكيد حذف البارتنر ده؟ أي صلاحيات مربوطة بيه هتتشال.')) return;
+    await supabase.from('partners').delete().eq('id', b.dataset.id);
+    loadLists();
+  }));
+}
+
+document.getElementById('addBrandBtn').addEventListener('click', async () => {
+  const input = document.getElementById('newBrandInput');
+  const name = input.value.trim();
+  if(!name) return;
+  const { error } = await supabase.from('brands').insert({ name });
+  if(!error){ input.value = ''; loadLists(); } else alert(error.message);
+});
+document.getElementById('addPartnerBtn').addEventListener('click', async () => {
+  const input = document.getElementById('newPartnerInput');
+  const name = input.value.trim();
+  if(!name) return;
+  const { error } = await supabase.from('partners').insert({ name });
+  if(!error){ input.value = ''; loadLists(); } else alert(error.message);
+});
+
+init();
+</script>
+
+</body>
+</html>

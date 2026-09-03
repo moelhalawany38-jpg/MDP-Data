@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>المستخدمين والصلاحيات — MDP Data</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div>
+    <nav>
+      <a href="admin.html">رفع الداتا</a>
+      <a href="brands.html">البراندات والبارتنرز</a>
+      <a href="users.html" class="active">المستخدمين والصلاحيات</a>
+      <a href="profile.html">تغيير كلمة المرور</a>
+    </nav>
+    <div class="who" id="whoBox"></div>
+    <a href="#" id="logoutLink" class="small">تسجيل الخروج</a>
+  </aside>
+
+  <main class="main">
+    <h1>المستخدمين والصلاحيات</h1>
+    <p class="subtitle">أنشئ حساب لكل براند مانجر أو أكونت مانجر، وحدد له البراند أو البارتنر (أو أكتر من واحد) اللي يشوفه.</p>
+
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-header">إنشاء مستخدم جديد</div>
+        <div style="padding:16px 20px;">
+          <div class="field">
+            <label>اسم المستخدم (من غير مسافات، إنجليزي)</label>
+            <input type="text" id="newUsername" placeholder="مثال: ahmed.sales">
+          </div>
+          <div class="field">
+            <label>كلمة المرور</label>
+            <input type="text" id="newPassword" placeholder="6 أحرف على الأقل">
+          </div>
+          <div class="field">
+            <label>الاسم (اختياري)</label>
+            <input type="text" id="newDisplayName" placeholder="مثال: أحمد محمد">
+          </div>
+          <button class="btn" id="createUserBtn">إنشاء الحساب</button>
+          <div class="status-msg" id="createUserStatus"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">المستخدمين الحاليين</div>
+        <div id="usersList"><div class="empty-state">جاري التحميل...</div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ============ Modal: manage a user's permissions ============ -->
+<div id="permModal" style="display:none;position:fixed;inset:0;background:rgba(20,25,20,.4);align-items:center;justify-content:center;z-index:50;">
+  <div class="panel" style="width:100%;max-width:440px;">
+    <div class="panel-header">
+      <span id="modalUserLabel">صلاحيات المستخدم</span>
+      <button class="btn-outline btn btn-sm" id="closeModalBtn">إغلاق</button>
+    </div>
+    <div style="padding:18px 20px;">
+      <p class="muted small" style="margin:0 0 10px;">براندات مسموح له يشوفها (كل داتا البراند)</p>
+      <div id="modalBrandChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
+      <div class="inline-form" style="margin-bottom:20px;">
+        <select id="modalBrandSelect"><option value="">اختار براند...</option></select>
+        <button class="btn btn-sm" id="modalAddBrandBtn" style="width:auto;">إضافة</button>
+      </div>
+
+      <p class="muted small" style="margin:0 0 10px;">بارتنرز مسموح له يشوفهم (داتا البارتنر بس، ممكن أكتر من واحد)</p>
+      <div id="modalPartnerChips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;"></div>
+      <div class="inline-form">
+        <select id="modalPartnerSelect"><option value="">اختار بارتنر...</option></select>
+        <button class="btn btn-sm" id="modalAddPartnerBtn" style="width:auto;">إضافة</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let allBrands = [];
+let allPartners = [];
+let modalUserId = null;
+
+async function init(){
+  const { data: { session } } = await supabase.auth.getSession();
+  if(!session){ window.location.href = 'index.html'; return; }
+  const { data: profile } = await supabase.from('profiles').select('is_admin, email, display_name').eq('id', session.user.id).single();
+  if(!profile || !profile.is_admin){ window.location.href = 'dashboard.html'; return; }
+  document.getElementById('whoBox').textContent = (profile.display_name || profile.email) + ' (أدمن)';
+  loadBrandPartnerOptions();
+  loadUsers();
+}
+document.getElementById('logoutLink').addEventListener('click', async (e) => {
+  e.preventDefault();
+  await supabase.auth.signOut();
+  window.location.href = 'index.html';
+});
+
+async function loadBrandPartnerOptions(){
+  const { data: brands } = await supabase.from('brands').select('name').order('name');
+  const { data: partners } = await supabase.from('partners').select('name').order('name');
+  allBrands = brands || [];
+  allPartners = partners || [];
+
+  const brandSelect = document.getElementById('modalBrandSelect');
+  brandSelect.innerHTML = '<option value="">اختار براند...</option><option value="*">كل البراندات</option>'
+    + allBrands.map(b => `<option value="${b.name}">${b.name}</option>`).join('');
+  const partnerSelect = document.getElementById('modalPartnerSelect');
+  partnerSelect.innerHTML = '<option value="">اختار بارتنر...</option><option value="*">كل البارتنرز</option>'
+    + allPartners.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+
+  if(!allBrands.length && !allPartners.length){
+    document.getElementById('createUserStatus').innerHTML = '<a href="brands.html">أضف براندات وبارتنرز الأول من هنا</a> عشان تقدر تحدد صلاحيات.';
+  }
+}
+
+async function loadUsers(){
+  const { data: profiles } = await supabase.from('profiles').select('id, email, display_name, is_admin').order('created_at', { ascending: false });
+  const { data: perms } = await supabase.from('permissions').select('user_id, perm_type, value');
+
+  const permMap = {};
+  (perms || []).forEach(p => {
+    if(!permMap[p.user_id]) permMap[p.user_id] = { brand: [], partner: [] };
+    permMap[p.user_id][p.perm_type].push(p.value);
+  });
+
+  const list = document.getElementById('usersList');
+  if(!profiles || !profiles.length){
+    list.innerHTML = '<div class="empty-state">لسه مفيش مستخدمين.</div>';
+    return;
+  }
+
+  list.innerHTML = profiles.map(p => {
+    const mine = permMap[p.id] || { brand: [], partner: [] };
+    const brandLabels = mine.brand.map(v => v === '*' ? 'كل البراندات' : v);
+    const partnerLabels = mine.partner.map(v => v === '*' ? 'كل البارتنرز' : v);
+    const summary = [
+      brandLabels.length ? 'براندات: ' + brandLabels.join('، ') : null,
+      partnerLabels.length ? 'بارتنرز: ' + partnerLabels.join('، ') : null
+    ].filter(Boolean).join(' | ') || 'مفيش صلاحيات محددة';
+    return `
+    <div class="list-row">
+      <div>
+        <div>${p.display_name || p.email}${p.is_admin ? ' <span class="badge">أدمن</span>' : ''}</div>
+        <div class="muted small">${summary}</div>
+      </div>
+      <button class="btn btn-outline btn-sm manage-btn" data-id="${p.id}" data-label="${p.display_name || p.email}">إدارة الصلاحيات</button>
+    </div>`;
+  }).join('');
+
+  document.querySelectorAll('.manage-btn').forEach(btn => {
+    btn.addEventListener('click', () => openPermModal(btn.dataset.id, btn.dataset.label));
+  });
+}
+
+document.getElementById('createUserBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('createUserBtn');
+  const status = document.getElementById('createUserStatus');
+  const username = document.getElementById('newUsername').value.trim().toLowerCase();
+  const password = document.getElementById('newPassword').value;
+  const displayName = document.getElementById('newDisplayName').value.trim();
+
+  status.textContent = ''; status.className = 'status-msg';
+  if(!username || !password || password.length < 6){
+    status.textContent = 'محتاج اسم مستخدم وكلمة مرور 6 أحرف على الأقل.';
+    status.classList.add('err');
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = 'جاري الإنشاء...';
+
+  const tempClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { storageKey: 'mdp-temp-signup', persistSession: false, autoRefreshToken: false }
+  });
+
+  try{
+    const email = username + USERNAME_DOMAIN;
+    const { data, error } = await tempClient.auth.signUp({ email, password });
+    if(error) throw error;
+
+    if(displayName && data.user){
+      await supabase.from('profiles').update({ display_name: displayName }).eq('id', data.user.id);
+    }
+
+    status.textContent = 'تم إنشاء الحساب بنجاح.';
+    status.classList.add('ok');
+    document.getElementById('newUsername').value = '';
+    document.getElementById('newPassword').value = '';
+    document.getElementById('newDisplayName').value = '';
+    loadUsers();
+  }catch(err){
+    status.textContent = 'حصل خطأ: ' + err.message;
+    status.classList.add('err');
+  }finally{
+    btn.disabled = false; btn.textContent = 'إنشاء الحساب';
+  }
+});
+
+async function openPermModal(userId, label){
+  modalUserId = userId;
+  document.getElementById('modalUserLabel').textContent = 'صلاحيات: ' + label;
+  document.getElementById('permModal').style.display = 'flex';
+  await renderModalChips();
+}
+
+async function renderModalChips(){
+  const { data: perms } = await supabase.from('permissions').select('id, perm_type, value').eq('user_id', modalUserId);
+  const brandChips = (perms || []).filter(p => p.perm_type === 'brand');
+  const partnerChips = (perms || []).filter(p => p.perm_type === 'partner');
+
+  const brandBox = document.getElementById('modalBrandChips');
+  brandBox.innerHTML = brandChips.length
+    ? brandChips.map(p => `<span class="chip">${p.value === '*' ? 'كل البراندات' : p.value} <button data-id="${p.id}" class="remove-perm-btn">×</button></span>`).join('')
+    : '<span class="muted small">مفيش براندات مضافة لسه.</span>';
+
+  const partnerBox = document.getElementById('modalPartnerChips');
+  partnerBox.innerHTML = partnerChips.length
+    ? partnerChips.map(p => `<span class="chip">${p.value === '*' ? 'كل البارتنرز' : p.value} <button data-id="${p.id}" class="remove-perm-btn">×</button></span>`).join('')
+    : '<span class="muted small">مفيش بارتنرز مضافين لسه.</span>';
+
+  document.querySelectorAll('.remove-perm-btn').forEach(b => {
+    b.addEventListener('click', async () => {
+      await supabase.from('permissions').delete().eq('id', b.dataset.id);
+      renderModalChips();
+      loadUsers();
+    });
+  });
+}
+
+document.getElementById('modalAddBrandBtn').addEventListener('click', async () => {
+  const select = document.getElementById('modalBrandSelect');
+  const value = select.value;
+  if(!value) return;
+  const { error } = await supabase.from('permissions').insert({ user_id: modalUserId, perm_type: 'brand', value });
+  if(!error){ select.value = ''; renderModalChips(); loadUsers(); }
+});
+document.getElementById('modalAddPartnerBtn').addEventListener('click', async () => {
+  const select = document.getElementById('modalPartnerSelect');
+  const value = select.value;
+  if(!value) return;
+  const { error } = await supabase.from('permissions').insert({ user_id: modalUserId, perm_type: 'partner', value });
+  if(!error){ select.value = ''; renderModalChips(); loadUsers(); }
+});
+
+document.getElementById('closeModalBtn').addEventListener('click', () => {
+  document.getElementById('permModal').style.display = 'none';
+});
+
+init();
+</script>
+
+</body>
+</html>
