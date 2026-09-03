@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>بياناتي — MDP Data</title>
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -10,244 +9,89 @@
 <script src="config.js"></script>
 </head>
 <body>
-
 <div class="app-shell">
   <aside class="sidebar">
     <div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div>
-    <nav>
-      <a href="dashboard.html" class="active">بياناتي</a>
-      <a href="profile.html">تغيير كلمة المرور</a>
-    </nav>
-    <div class="who" id="whoBox"></div>
-    <a href="#" id="logoutLink" class="small">تسجيل الخروج</a>
+    <nav><a href="dashboard.html" class="active">بياناتي</a><a href="profile.html">تغيير كلمة المرور</a></nav>
+    <div class="who" id="whoBox"></div><a href="#" id="logoutLink" class="small">تسجيل الخروج</a>
   </aside>
-
   <main class="main">
     <h1>بياناتي</h1>
     <p class="subtitle" id="subtitlePerms">جاري التحميل...</p>
-
-    <div class="toolbar">
-      <span></span>
-      <button class="btn btn-sm" id="downloadBtn" style="width:auto;">تنزيل Excel</button>
-    </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <span>الداتا</span>
-        <span class="badge" id="countBadge">0 صف</span>
-      </div>
-      <div class="table-wrap" id="tableWrap">
-        <div class="empty-state">جاري تحميل البيانات...</div>
-      </div>
+    <div class="toolbar"><span></span><button class="btn btn-sm" id="downloadBtn" style="width:auto;">تنزيل Excel</button></div>
+    <div class="panel"><div class="panel-header"><span>الداتا</span><span class="badge" id="countBadge">0 صف</span></div>
+      <div class="table-wrap" id="tableWrap"><div class="empty-state">جاري تحميل البيانات...</div></div>
     </div>
   </main>
 </div>
-
 <script>
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let allRows = [], allColumns = [];
 
-let allRows = [];
-let allColumns = [];
+async function init(){
+  const {data:{session}} = await supabaseClient.auth.getSession();
+  if(!session){ location.href='index.html'; return; }
 
-async function init() {
-  const { data: { session } } = await supabaseClient.auth.getSession();
-
-  if (!session) {
-    window.location.href = 'index.html';
-    return;
-  }
-
-  // بيانات المستخدم
-  const { data: profile } = await supabaseClient
-    .from('profiles')
-    .select('is_admin, email, display_name')
-    .eq('id', session.user.id)
-    .single();
-
-  if (profile && profile.is_admin) {
-    window.location.href = 'admin.html';
-    return;
-  }
+  const {data:profile,error:profileError} = await supabaseClient.from('profiles')
+    .select('is_admin,email,display_name').eq('id',session.user.id).single();
+  if(profileError){ console.error(profileError); }
+  if(profile && profile.is_admin){ location.href='admin.html'; return; }
 
   document.getElementById('whoBox').textContent =
     (profile && (profile.display_name || profile.email)) || session.user.email;
 
-  // صلاحيات المستخدم
-  const { data: perms } = await supabaseClient
-    .from('permissions')
-    .select('perm_type, value')
-    .eq('user_id', session.user.id);
+  const {data:perms,error:permError} = await supabaseClient.from('user_permissions')
+    .select('brand,partner_name').eq('user_id',session.user.id).order('brand');
 
-  const brands = (perms || [])
-    .filter(p => p.perm_type === 'brand')
-    .map(p => p.value === '*' ? 'كل البراندات' : p.value);
-
-  const partners = (perms || [])
-    .filter(p => p.perm_type === 'partner')
-    .map(p => p.value === '*' ? 'كل البارتنرز' : p.value);
-
-  const parts = [];
-
-  if (brands.length) {
-    parts.push('البراندات: ' + brands.join('، '));
-  }
-
-  if (partners.length) {
-    parts.push('البارتنرز: ' + partners.join('، '));
-  }
-
-  document.getElementById('subtitlePerms').textContent =
-    parts.length
-      ? parts.join(' — ')
-      : 'مفيش صلاحيات متاحة لحسابك حاليًا — كلم الأدمن.';
-
-
-  // الأعمدة
-  const { data: colsRow } = await supabaseClient
-    .from('data_columns')
-    .select('columns')
-    .eq('id', 1)
-    .single();
-
-  allColumns = (colsRow && colsRow.columns) || [];
-
-
-  // البيانات
-  const { data: rows, error } = await supabaseClient
-    .from('data_rows')
-    .select('row_data')
-    .order('id', { ascending: true });
-
-
-  if (error) {
-    console.error(error);
-
-    document.getElementById('tableWrap').innerHTML =
-      '<div class="empty-state">حصل خطأ في تحميل البيانات: ' +
-      error.message +
-      '</div>';
-
+  if(permError){
+    console.error(permError);
+    document.getElementById('subtitlePerms').textContent='حصل خطأ في تحميل الصلاحيات.';
+    document.getElementById('tableWrap').innerHTML='<div class="empty-state">حصل خطأ: '+escapeHtml(permError.message)+'</div>';
     return;
   }
 
+  const permissions = perms || [];
+  document.getElementById('subtitlePerms').textContent = permissions.length
+    ? 'صلاحياتك: ' + permissions.map(p => p.brand + ' + ' + p.partner_name).join(' — ')
+    : 'مفيش صلاحيات متاحة لحسابك حاليًا — كلم الأدمن.';
 
-  allRows = (rows || []).map(r => r.row_data);
+  const {data:colsRow} = await supabaseClient.from('data_columns').select('columns').eq('id',1).single();
+  allColumns = (colsRow && colsRow.columns) || [];
 
-  if (!allColumns.length && allRows.length) {
-    allColumns = Object.keys(allRows[0]);
+  // RLS في Supabase هو الذي يمنع وصول المستخدم لأي صف غير مسموح له.
+  const {data:rows,error} = await supabaseClient.from('data_rows')
+    .select('row_data').order('id',{ascending:true});
+
+  if(error){
+    console.error(error);
+    document.getElementById('tableWrap').innerHTML='<div class="empty-state">حصل خطأ في تحميل البيانات: '+escapeHtml(error.message)+'</div>';
+    return;
   }
 
+  allRows=(rows||[]).map(r=>r.row_data);
+  if(!allColumns.length && allRows.length) allColumns=Object.keys(allRows[0]);
   renderTable(allRows);
 }
 
-
-function renderTable(rows) {
-
-  document.getElementById('countBadge').textContent =
-    rows.length + ' صف';
-
-  const wrap = document.getElementById('tableWrap');
-
-  if (!rows.length) {
-    wrap.innerHTML =
-      '<div class="empty-state">لا توجد بيانات متاحة لحسابك حاليًا.</div>';
-
-    return;
-  }
-
-
-  let html = '<table><thead><tr>';
-
-  allColumns.forEach(c => {
-    html += `<th>${escapeHtml(c)}</th>`;
-  });
-
-  html += '</tr></thead><tbody>';
-
-
-  rows.forEach(r => {
-
-    html += '<tr>';
-
-    allColumns.forEach(c => {
-      html += `<td>${escapeHtml(r[c] ?? '')}</td>`;
-    });
-
-    html += '</tr>';
-
-  });
-
-
-  html += '</tbody></table>';
-
-  wrap.innerHTML = html;
+function renderTable(rows){
+  document.getElementById('countBadge').textContent=rows.length+' صف';
+  const wrap=document.getElementById('tableWrap');
+  if(!rows.length){wrap.innerHTML='<div class="empty-state">لا توجد بيانات متاحة لحسابك حاليًا.</div>';return;}
+  let html='<table><thead><tr>';
+  allColumns.forEach(c=>html+=`<th>${escapeHtml(c)}</th>`);
+  html+='</tr></thead><tbody>';
+  rows.forEach(r=>{html+='<tr>';allColumns.forEach(c=>html+=`<td>${escapeHtml(r[c]??'')}</td>`);html+='</tr>';});
+  wrap.innerHTML=html+'</tbody></table>';
 }
-
-
-function escapeHtml(v) {
-
-  return String(v).replace(
-    /[&<>"']/g,
-
-    m => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;'
-    }[m])
-
-  );
-
-}
-
-
-document.getElementById('downloadBtn').addEventListener('click', () => {
-
-  if (!allRows.length) return;
-
-  const ws = XLSX.utils.json_to_sheet(allRows, {
-    header: allColumns
-  });
-
-  const wb = XLSX.utils.book_new();
-
-  XLSX.utils.book_append_sheet(
-    wb,
-    ws,
-    'الداتا'
-  );
-
-  const today = new Date()
-    .toISOString()
-    .slice(0, 10);
-
-  XLSX.writeFile(
-    wb,
-    `mdp-data-${today}.xlsx`
-  );
-
+function escapeHtml(v){return String(v).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+document.getElementById('downloadBtn').addEventListener('click',()=>{
+  if(!allRows.length)return;
+  const ws=XLSX.utils.json_to_sheet(allRows,{header:allColumns});
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'الداتا');
+  XLSX.writeFile(wb,`mdp-data-${new Date().toISOString().slice(0,10)}.xlsx`);
 });
-
-
-document.getElementById('logoutLink').addEventListener(
-  'click',
-
-  async (e) => {
-
-    e.preventDefault();
-
-    await supabaseClient.auth.signOut();
-
-    window.location.href = 'index.html';
-
-  }
-
-);
-
-
+document.getElementById('logoutLink').addEventListener('click',async e=>{
+  e.preventDefault(); await supabaseClient.auth.signOut(); location.href='index.html';
+});
 init();
-</script>
-
-</body>
-</html>
+</script></body></html>
