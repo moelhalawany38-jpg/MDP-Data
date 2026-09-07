@@ -159,15 +159,11 @@ a{color:var(--ink);text-decoration-color:var(--accent-dark);}
 .credit{
   position:fixed;
   left:16px;
-  bottom:12px;
-  font-size:12px;
-  font-weight:700;
-  color:var(--ink);
-  background:var(--panel);
-  border:1px solid var(--border);
-  border-radius:6px;
-  padding:4px 10px;
-  z-index:40;
+  bottom:calc(10px + env(safe-area-inset-bottom, 0px));
+  font-size:11.5px;
+  font-weight:600;
+  color:var(--muted);
+  z-index:5;
   pointer-events:none;
   user-select:none;
   direction:ltr;
