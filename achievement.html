@@ -17,11 +17,11 @@
     <a href="#" id="logoutLink" class="small">تسجيل الخروج</a>
   </aside>
 
-  <main class="main archive-main">
+  <main class="main achievement-main">
     <h1>Achievement</h1>
     <p class="subtitle" id="subtitle">اختار البراند ثم البارتنرز والشهور لعرض التقرير.</p>
 
-    <div class="panel archive-filters">
+    <div class="panel achievement-filters">
       <div class="filter-grid">
         <div class="field">
           <label>Brand</label>
@@ -44,13 +44,13 @@
           </details>
         </div>
 
-        <div class="archive-actions">
+        <div class="achievement-actions">
           <button class="btn btn-sm" id="downloadBtn" style="width:auto;">تنزيل Excel</button>
         </div>
       </div>
     </div>
 
-    <div class="archive-stats">
+    <div class="achievement-stats">
       <span class="badge" id="rowsBadge">0 صف</span>
       <span class="muted small" id="loadingText"></span>
     </div>
@@ -60,7 +60,7 @@
         <span>Achievement Report</span>
         <span class="badge" id="grandBadge">0</span>
       </div>
-      <div class="table-wrap archive-table-wrap" id="tableWrap">
+      <div class="table-wrap achievement-table-wrap" id="tableWrap">
         <div class="empty-state">اختر Brand لعرض التقرير.</div>
       </div>
     </div>
@@ -117,13 +117,13 @@ async function init(){
   whoBox.textContent=p.display_name||p.email||session.user.email;
   navBox.innerHTML=p.is_admin?`
     <a href="admin.html">رفع الداتا</a>
-    <a href="archive-upload.html">رفع بيانات Achievement</a>
+    <a href="achievement-upload.html">رفع بيانات Achievement</a>
     <a href="brands.html">البراندات والبارتنرز</a>
     <a href="users.html">المستخدمين والصلاحيات</a>
-    <a class="active" href="archive.html">Achievement</a>
+    <a class="active" href="achievement.html">Achievement</a>
     <a href="profile.html">تغيير كلمة المرور</a>`:
     `<a href="dashboard.html">بياناتي</a>
-     <a class="active" href="archive.html">Achievement</a>
+     <a class="active" href="achievement.html">Achievement</a>
      <a href="profile.html">تغيير كلمة المرور</a>`;
 
   // بنجيب قائمة البراندات بس (خفيفة وسريعة) بدل ما نجيب كل صفوف الـ Achievement
@@ -268,7 +268,7 @@ function renderReport(){
   const {rows,miami,months}=buildReport();
   rowsBadge.textContent=(rows.length+(miami?1:0))+' صف';
   let grand={};months.forEach(m=>grand[m]=0);
-  let html='<table class="archive-table"><thead><tr><th>Partner Name</th><th>Customer Name</th><th>Customer Code</th>';
+  let html='<table class="achievement-table"><thead><tr><th>Partner Name</th><th>Customer Name</th><th>Customer Code</th>';
   months.forEach(m=>html+='<th class="num">'+esc(m)+'</th>');
   html+='<th class="num total-col">Grand Total</th></tr></thead><tbody>';
   if(!rows.length&&!miami){html+=`<tr><td colspan="${4+months.length}" class="empty-cell">لا توجد بيانات مطابقة للفلاتر الحالية.</td></tr>`;}
