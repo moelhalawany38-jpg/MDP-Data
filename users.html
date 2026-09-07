@@ -11,6 +11,7 @@
 .summary{display:flex;gap:8px;flex-wrap:wrap}
 .pill{display:inline-flex;align-items:center;border-radius:20px;padding:4px 10px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--ink);}
 @media(max-width:700px){.checks{grid-template-columns:1fr}}
+@media(max-width:600px){.box-actions{display:grid;grid-template-columns:1fr 1fr}.box-actions .btn{width:100%}#modal{align-items:flex-end!important}#modal>.panel{width:100%!important;max-height:92vh!important;border-radius:14px 14px 0 0}.summary{width:100%}.pill{font-size:11px}.list{max-height:38vh}}
 </style></head><body>
 <div class="app-shell"><aside class="sidebar"><div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div><nav><a href="admin.html">رفع الداتا</a><a href="achievement-upload.html">رفع بيانات Achievement</a><a href="brands.html">البراندات والبارتنرز</a><a class="active" href="users.html">المستخدمين والصلاحيات</a><a href="achievement.html">Achievement</a><a href="profile.html">تغيير كلمة المرور</a></nav><div class="who" id="whoBox"></div><a href="#" id="logoutLink">تسجيل الخروج</a><div class="credit">&#8206;@Elhalwany</div></aside>
 <main class="main"><h1>المستخدمين والصلاحيات</h1><p class="subtitle">الصلاحيات تعمل مثل فلتر Excel: Brands المختارة AND Partners المختارين.</p>
