@@ -1,4 +1,4 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>بياناتي</title><link rel="stylesheet" href="style.css"><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="config.js"></script></head><body><div class="app-shell"><aside class="sidebar"><div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div><nav><a class="active" href="dashboard.html">بياناتي</a><a href="achievement.html">Achievement</a><a href="profile.html">تغيير كلمة المرور</a></nav><div class="who" id="whoBox"></div><a href="#" id="logout">تسجيل الخروج</a><div class="credit">&#8206;@Elhalwany</div></aside><main class="main"><h1>بياناتي</h1><p class="subtitle" id="info">جاري التحميل...</p><button class="btn" id="downloadBtn">تنزيل Excel</button><div class="panel"><div class="panel-header">الداتا <span class="badge" id="count">0 صف</span></div><div class="table-wrap" id="tableWrap"></div></div></main></div><script>
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>بياناتي</title><link rel="stylesheet" href="style.css"><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="config.js"></script></head><body><div class="app-shell"><aside class="sidebar"><div class="auth-mark"><span class="dot"></span><span>MDP Data</span></div><nav><a class="active" href="dashboard.html">بياناتي</a><a href="achievement.html" id="achLink">Achievement</a><a href="profile.html">تغيير كلمة المرور</a></nav><div class="who" id="whoBox"></div><a href="#" id="logout">تسجيل الخروج</a><div class="credit">&#8206;@Elhalwany</div></aside><main class="main"><h1>بياناتي</h1><p class="subtitle" id="info">جاري التحميل...</p><button class="btn" id="downloadBtn">تنزيل Excel</button><div class="panel"><div class="panel-header">الداتا <span class="badge" id="count">0 صف</span></div><div class="table-wrap" id="tableWrap"></div></div></main></div><script>
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);let rows=[],cols=[];const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 // عشان نجيب كل الصفوف مهما كان عددهم، بنطلب على دفعات (صفحات) لحد ما ترجع صفحة فاضية تمامًا —
@@ -26,6 +26,11 @@ async function init(){
   let {data:pm}=await sb.from('permissions').select('perm_type,value').eq('user_id',session.user.id);
   let B=(pm||[]).filter(x=>x.perm_type==='brand').map(x=>x.value),P=(pm||[]).filter(x=>x.perm_type==='partner').map(x=>x.value);
   info.textContent=`🏷️ ${B.length} Brands — 🤝 ${P.length} Partners — يتم عرض التقاطع بينهم مثل Excel`;
+
+  const hasAchPerm=(pm||[]).some(x=>x.perm_type==='achievement');
+  const {data:settings}=await sb.from('app_settings').select('achievement_enabled').eq('id',1).single();
+  const achievementOn = settings ? settings.achievement_enabled!==false : true;
+  if(!hasAchPerm||!achievementOn) achLink.remove();
   if(!B.length||!P.length){tableWrap.innerHTML='<div class="empty-state">لا توجد صلاحيات مكتملة.</div>';return}
 
   let c=await sb.from('data_columns').select('columns').eq('id',1).single();

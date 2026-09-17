@@ -52,6 +52,17 @@ async function init(){
 
   document.getElementById('whoBox').textContent = (profile && (profile.display_name || profile.email)) || session.user.email;
 
+  let showAchievement = true;
+  if(!isAdmin){
+    const [{data:perm}, {data:settings}] = await Promise.all([
+      supabaseClient.from('permissions').select('id').eq('user_id', session.user.id).eq('perm_type','achievement').limit(1),
+      supabaseClient.from('app_settings').select('achievement_enabled').eq('id',1).single()
+    ]);
+    const achievementOn = settings ? settings.achievement_enabled !== false : true;
+    showAchievement = !!(perm && perm.length) && achievementOn;
+  }
+  const achievementLink = showAchievement ? '<a href="achievement.html">Achievement</a>' : '';
+
   document.getElementById('navBox').innerHTML = isAdmin ? `
     <a href="admin.html">رفع الداتا</a>
     <a href="achievement-upload.html">رفع بيانات Achievement</a>
@@ -61,7 +72,7 @@ async function init(){
     <a href="profile.html" class="active">تغيير كلمة المرور</a>
   ` : `
     <a href="dashboard.html">بياناتي</a>
-    <a href="achievement.html">Achievement</a>
+    ${achievementLink}
     <a href="profile.html" class="active">تغيير كلمة المرور</a>
   `;
 }
